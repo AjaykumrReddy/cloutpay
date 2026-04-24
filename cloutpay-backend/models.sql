@@ -1,4 +1,3 @@
--- Users table
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     phone_number VARCHAR(15) UNIQUE NOT NULL,
@@ -10,19 +9,43 @@ CREATE TABLE IF NOT EXISTS users (
     last_login TIMESTAMP
 );
 
--- Indexes for users
 CREATE INDEX IF NOT EXISTS idx_users_phone_number ON users (phone_number);
 CREATE INDEX IF NOT EXISTS idx_users_created_at ON users (created_at);
 CREATE INDEX IF NOT EXISTS idx_phone_created ON users (phone_number, created_at);
 
--- Payments table
-CREATE TABLE IF NOT EXISTS payments (
+CREATE TABLE IF NOT EXISTS otps (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id),
-    user_name VARCHAR NOT NULL,
-    amount INTEGER NOT NULL,
+    phone_number VARCHAR(15) NOT NULL,
+    code VARCHAR(64) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    is_used BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Indexes for payments
+CREATE INDEX IF NOT EXISTS idx_otps_phone_number ON otps (phone_number);
+
+CREATE TABLE IF NOT EXISTS payment_orders (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    razorpay_order_id VARCHAR UNIQUE,
+    amount INTEGER NOT NULL,
+    currency VARCHAR DEFAULT 'INR',
+    status VARCHAR DEFAULT 'created',
+    created_at TIMESTAMP DEFAULT NOW(),
+    is_active BOOLEAN DEFAULT TRUE
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_orders_razorpay_order_id ON payment_orders (razorpay_order_id);
+
+CREATE TABLE IF NOT EXISTS payments (
+    id SERIAL PRIMARY KEY,
+    order_id INTEGER REFERENCES payment_orders(id),
+    razorpay_payment_id VARCHAR UNIQUE,
+    user_name VARCHAR NOT NULL,
+    amount INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    is_active BOOLEAN DEFAULT TRUE
+);
+
 CREATE INDEX IF NOT EXISTS idx_payments_created_at ON payments (created_at);
+CREATE INDEX IF NOT EXISTS idx_payments_razorpay_payment_id ON payments (razorpay_payment_id);

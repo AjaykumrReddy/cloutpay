@@ -1,18 +1,23 @@
+import hashlib
+import hmac
+import os
+
 from sqlalchemy.orm import Session
-from app.models.payment import PaymentOrder, Payment
+
+from app.models.payment import Payment, PaymentOrder
 from app.models.users import User
 from app.services.razorpay_service import client
-import hmac, hashlib, os
 
 
 class PaymentService:
-
     def __init__(self, db: Session):
         self.db = db
 
     def create_order(self, user_id: int | None, amount: int):
+        if not isinstance(amount, int):
+            raise ValueError("Amount must be an integer")
         if amount < 10:
-            raise ValueError("Minimum amount is ₹10")
+            raise ValueError("Minimum amount is Rs 10")
 
         razorpay_order = client.order.create({
             "amount": amount * 100,
@@ -35,7 +40,7 @@ class PaymentService:
             "currency": "INR"
         }
 
-    def verify_payment(self, data: dict, user_id: int | None = None) -> Payment:
+    def verify_payment(self, data: dict, user_id: int | None = None) -> tuple[Payment, bool]:
         order_id = data["razorpay_order_id"]
         payment_id = data["razorpay_payment_id"]
         signature = data["razorpay_signature"]
@@ -58,13 +63,11 @@ class PaymentService:
         if not order:
             raise ValueError("Order not found")
 
-        # Idempotency: return existing payment instead of crashing
         if order.status == "paid":
             existing = self.db.query(Payment).filter_by(order_id=order.id).first()
             if existing:
-                return existing
+                return existing, False
 
-        # Resolve display name: anonymous overrides everything
         if is_anonymous:
             user_name = "Anonymous"
         elif user_id:
@@ -85,4 +88,4 @@ class PaymentService:
         self.db.add(payment)
         self.db.flush()
 
-        return payment
+        return payment, True

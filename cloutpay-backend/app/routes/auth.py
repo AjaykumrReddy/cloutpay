@@ -60,8 +60,11 @@ async def send_otp(body: SendOTPRequest, db: Session = Depends(get_db)):
         return {"message": "OTP sent successfully"}
     except ValueError as e:
         raise HTTPException(status_code=429, detail=str(e))
+    except RuntimeError:
+        raise HTTPException(status_code=500, detail="Authentication service is not configured")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"send-otp: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send OTP")
 
 
 @router.post("/verify-otp")
@@ -71,6 +74,8 @@ def verify_otp(body: VerifyOTPRequest, db: Session = Depends(get_db)):
         return result  # { token, is_new_user, display_name }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError:
+        raise HTTPException(status_code=500, detail="Authentication service is not configured")
 
 
 @router.post("/update-profile")

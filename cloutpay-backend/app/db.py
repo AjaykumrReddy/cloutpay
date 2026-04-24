@@ -1,6 +1,5 @@
 import os
 from typing import Generator
-from venv import logger
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
@@ -51,11 +50,11 @@ def get_db() -> Generator[Session, None, None]:
         yield db
         db.commit()  # commit if everything is fine
 
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.rollback()
         raise
 
-    except Exception as e:
+    except Exception:
         db.rollback()
         raise
 

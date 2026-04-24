@@ -1,17 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case
 
 from app.db import get_db
-from app.models.payment import Payment, PaymentOrder
 from app.dependencies import get_current_user_id
+from app.models.payment import Payment, PaymentOrder
 
 router = APIRouter()
 
 
 @router.get("/leaderboard")
 def get_leaderboard(db: Session = Depends(get_db)):
-    # Named users ranked by total
     named = (
         db.query(Payment.user_name, func.sum(Payment.amount).label("total"))
         .filter(Payment.user_name != "Anonymous")
@@ -23,14 +22,13 @@ def get_leaderboard(db: Session = Depends(get_db)):
 
     leaderboard = [{"name": r.user_name, "amount": int(r.total)} for r in named]
 
-    # Aggregate all anonymous payments as one entry
     anon_total = (
         db.query(func.sum(Payment.amount))
         .filter(Payment.user_name == "Anonymous")
         .scalar()
     )
     if anon_total:
-        leaderboard.append({"name": "Someone 🕵️", "amount": int(anon_total)})
+        leaderboard.append({"name": "Someone", "amount": int(anon_total)})
         leaderboard.sort(key=lambda x: x["amount"], reverse=True)
         leaderboard = leaderboard[:10]
 
