@@ -30,6 +30,14 @@ export async function getHistory(token: string) {
 	return res.json();
 }
 
+export async function getMySummary(token: string) {
+	const res = await fetch(`${PUBLIC_API_BASE}/leaderboard/me`, {
+		headers: authHeaders(token)
+	});
+	if (!res.ok) throw new Error('Failed to fetch your stats');
+	return res.json();
+}
+
 export async function verifyPayment(data: Record<string, string>, token?: string | null) {
 	const res = await fetch(`${PUBLIC_API_BASE}/payments/verify-payment`, {
 		method: 'POST',

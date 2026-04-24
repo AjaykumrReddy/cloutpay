@@ -1,13 +1,33 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount } from 'svelte';
   import { PUBLIC_WS_URL } from '$env/static/public';
+  import { getLeaderboard, getMySummary } from '$lib/api';
+  import { authToken, displayName, isLoggedIn } from '$lib/auth';
   import { initiatePayment } from '$lib/razorpay';
-  import { getLeaderboard } from '$lib/api';
-  import { authStore, isLoggedIn, displayName, authToken } from '$lib/auth';
   import { toast } from '$lib/toast';
 
-  let leaderboard = $state<{ name: string; amount: number }[]>([]);
-  let activities = $state<{ text: string }[]>([]);
+  interface LeaderboardEntry {
+    name: string;
+    amount: number;
+  }
+
+  interface ActivityItem {
+    text: string;
+  }
+
+  interface MySummary {
+    display_name: string | null;
+    total_contributed: number;
+    payments_count: number;
+    current_rank: number | null;
+    amount_to_next_rank: number | null;
+    next_rank_name: string | null;
+    last_payment_at: string | null;
+  }
+
+  let leaderboard = $state<LeaderboardEntry[]>([]);
+  let activities = $state<ActivityItem[]>([]);
+  let mySummary = $state<MySummary | null>(null);
 
   let paying = $state(false);
   let amount = $state(100);
@@ -15,25 +35,65 @@
   let anonymous = $state(false);
   let showSuccess = $state(false);
   let totalRaised = $state(0);
+  let loadingSummary = $state(false);
+  let loadedSummaryToken = $state<string | null | undefined>(undefined);
 
   $effect(() => {
-    totalRaised = leaderboard.reduce((s, u) => s + u.amount, 0);
+    totalRaised = leaderboard.reduce((sum, entry) => sum + entry.amount, 0);
   });
 
-  function logout() {
-    authStore.clear();
-    toast.info('Logged out');
+  async function loadLeaderboard() {
+    leaderboard = await getLeaderboard();
   }
+
+  async function loadMyStats() {
+    if (!$authToken) {
+      mySummary = null;
+      loadedSummaryToken = null;
+      return;
+    }
+
+    loadingSummary = true;
+    try {
+      mySummary = await getMySummary($authToken);
+      loadedSummaryToken = $authToken;
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to load your stats');
+      loadedSummaryToken = $authToken;
+    } finally {
+      loadingSummary = false;
+    }
+  }
+
+  $effect(() => {
+    if (!$isLoggedIn) {
+      mySummary = null;
+      loadedSummaryToken = null;
+      return;
+    }
+
+    if ($authToken && loadedSummaryToken !== $authToken && !loadingSummary) {
+      loadMyStats();
+    }
+  });
 
   async function handlePayment() {
     const name = anonymous ? 'Anonymous' : ($displayName || userName.trim() || 'Anonymous');
-    if (amount < 10) { toast.error('Minimum amount is ₹10'); return; }
+    if (amount < 10) {
+      toast.error('Minimum amount is Rs 10');
+      return;
+    }
+
     paying = true;
     try {
       await initiatePayment(amount, name, $authToken, anonymous);
+      await loadLeaderboard();
+      if ($isLoggedIn) await loadMyStats();
       showSuccess = true;
-      toast.success(`₹${amount} contributed! You're on the board 🔥`);
-      setTimeout(() => showSuccess = false, 2800);
+      toast.success(`Rs ${amount} contributed successfully`);
+      setTimeout(() => {
+        showSuccess = false;
+      }, 2800);
     } catch (e: any) {
       if (e?.message !== 'cancelled') toast.error(e?.message || 'Payment failed');
     } finally {
@@ -45,7 +105,7 @@
     const ws = new WebSocket(PUBLIC_WS_URL);
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      if (data.type === 'NEW_ACTIVITY')    activities = [data.payload, ...activities].slice(0, 10);
+      if (data.type === 'NEW_ACTIVITY') activities = [data.payload, ...activities].slice(0, 10);
       if (data.type === 'INIT_ACTIVITIES') activities = data.payload;
       if (data.type === 'UPDATE_LEADERBOARD') leaderboard = data.payload;
     };
@@ -54,125 +114,197 @@
     return ws;
   }
 
+  function formatLastPayment(date: string | null) {
+    if (!date) return 'No contribution yet';
+    return new Date(date).toLocaleString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  function getMedal(index: number) {
+    if (index === 0) return '\u{1F947}';
+    if (index === 1) return '\u{1F948}';
+    if (index === 2) return '\u{1F949}';
+    return `#${index + 1}`;
+  }
+
+  function getTierLabel(index: number) {
+    if (index === 0) return 'Gold tier';
+    if (index === 1) return 'Silver tier';
+    if (index === 2) return 'Bronze tier';
+    return '';
+  }
+
+  function getSuccessMessage() {
+    if (!$isLoggedIn || !mySummary?.current_rank) {
+      return 'Your contribution is live on the board.';
+    }
+    if (mySummary.current_rank === 1) {
+      return 'You are leading the board right now.';
+    }
+    return `You are now ranked #${mySummary.current_rank}.`;
+  }
+
   onMount(() => {
-    getLeaderboard().then(data => leaderboard = data);
+    loadLeaderboard().catch(() => toast.error('Failed to load leaderboard'));
     const ws = connectWS();
     return () => ws.close();
   });
 </script>
 
 <div class="page">
-
-  <!-- NAV -->
-  <nav class="nav">
-    <span class="logo">CloutPay</span>
-    <div class="nav-links">
-      {#if $isLoggedIn}
-        <a href="/history" class="nav-btn">History</a>
-        <button class="nav-btn" onclick={logout}>Logout</button>
-      {:else}
-        <a href="/login" class="nav-btn primary">Login</a>
-      {/if}
-    </div>
-  </nav>
-
-  <!-- HERO -->
   <section class="hero">
-    <div class="glow-1"></div>
-    <div class="glow-2"></div>
+    <div class="glow glow-a"></div>
+    <div class="glow glow-b"></div>
 
-    <div class="badge">⚡ Live · {activities.length} recent actions</div>
-
-    <h1>Turn Money Into<br/><span class="gradient-text">Status.</span></h1>
-    <p class="sub">Support the board. Climb the ranks. Get seen.</p>
+    <div class="badge">Live board · {activities.length} recent actions</div>
+    <h1>Turn Money Into<br /><span class="gradient-text">Status.</span></h1>
+    <p class="sub">Support the board, climb the ranks, and keep your profile sharp.</p>
 
     {#if $isLoggedIn && $displayName}
-      <p class="welcome">Welcome back, <span class="name-highlight">{$displayName}</span> 🔥</p>
+      <p class="welcome">Welcome back, <span class="name-highlight">{$displayName}</span></p>
     {/if}
 
-    <div class="hero-body">
-
-      <!-- PAYMENT FORM -->
+    <div class="hero-grid">
       <div class="form-card">
-      <div class="inputs">
-        {#if !$isLoggedIn}
-          <input
-            type="text"
-            placeholder="Your name (optional)"
-            bind:value={userName}
-            disabled={paying || anonymous}
-          />
-        {/if}
-        <div class="amount-wrap">
-          <span class="rupee">₹</span>
-          <input
-            type="number"
-            placeholder="Amount"
-            min="10"
-            bind:value={amount}
-            disabled={paying}
-          />
+        <div class="inputs">
+          {#if !$isLoggedIn}
+            <input
+              type="text"
+              placeholder="Your name (optional)"
+              bind:value={userName}
+              disabled={paying || anonymous}
+            />
+          {/if}
+          <div class="amount-wrap">
+            <span class="rupee">Rs</span>
+            <input
+              type="number"
+              placeholder="Amount"
+              min="10"
+              bind:value={amount}
+              disabled={paying}
+            />
+          </div>
         </div>
-      </div>
-      <div class="quick-amounts">
-        {#each [50, 100, 500, 1000] as q}
-          <button
-            class="quick-btn {amount === q ? 'active' : ''}"
-            onclick={() => amount = q}
-            disabled={paying}
-          >₹{q}</button>
-        {/each}
-      </div>
-      <label class="anon-toggle">
-        <input type="checkbox" bind:checked={anonymous} disabled={paying} />
-        <span>Stay anonymous 🕵️</span>
-      </label>
-      <button class="cta" onclick={handlePayment} disabled={paying}>
-        {paying ? 'Processing...' : '🚀 Get on the Board'}
-      </button>
-    </div>
 
-      <!-- STATS BAR -->
-      <div class="stats-bar">
-        <div class="stat">
-          <span class="stat-value">₹{totalRaised.toLocaleString('en-IN')}</span>
-          <span class="stat-label">Total Raised</span>
+        <div class="quick-amounts">
+          {#each [50, 100, 500, 1000] as quickAmount}
+            <button
+              class:active={amount === quickAmount}
+              class="quick-btn"
+              onclick={() => amount = quickAmount}
+              disabled={paying}
+            >
+              Rs {quickAmount}
+            </button>
+          {/each}
         </div>
-        <div class="stat-divider"></div>
-        <div class="stat">
-          <span class="stat-value">{leaderboard.length}</span>
-          <span class="stat-label">Contributors</span>
-        </div>
-        <div class="stat-divider"></div>
-        <div class="stat">
-          <span class="stat-value">{activities.length}</span>
-          <span class="stat-label">Live Actions</span>
+
+        <label class="anon-toggle">
+          <input type="checkbox" bind:checked={anonymous} disabled={paying} />
+          <span>Stay anonymous</span>
+        </label>
+
+        <button class="cta" onclick={handlePayment} disabled={paying}>
+          {paying ? 'Processing...' : 'Get on the board'}
+        </button>
+
+        <div class="stats-bar">
+          <div class="stat">
+            <span class="stat-value">Rs {totalRaised.toLocaleString('en-IN')}</span>
+            <span class="stat-label">Total raised</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat">
+            <span class="stat-value">{leaderboard.length}</span>
+            <span class="stat-label">Top slots shown</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat">
+            <span class="stat-value">{activities.length}</span>
+            <span class="stat-label">Live actions</span>
+          </div>
         </div>
       </div>
 
+      {#if $isLoggedIn}
+        <div class="personal-card">
+          <div class="section-header">
+            <h2>Your Standing</h2>
+          </div>
+
+          {#if loadingSummary}
+            <p class="personal-copy">Loading your contribution stats...</p>
+          {:else if mySummary}
+            <div class="personal-grid">
+              <div class="personal-stat">
+                <span class="personal-label">Current rank</span>
+                <strong>{mySummary.current_rank ? `#${mySummary.current_rank}` : 'Unranked'}</strong>
+              </div>
+              <div class="personal-stat">
+                <span class="personal-label">Your total</span>
+                <strong>Rs {mySummary.total_contributed.toLocaleString('en-IN')}</strong>
+              </div>
+              <div class="personal-stat">
+                <span class="personal-label">Payments made</span>
+                <strong>{mySummary.payments_count}</strong>
+              </div>
+              <div class="personal-stat">
+                <span class="personal-label">Last payment</span>
+                <strong>{formatLastPayment(mySummary.last_payment_at)}</strong>
+              </div>
+            </div>
+
+            {#if !mySummary.display_name}
+              <p class="personal-copy">
+                Add a display name so your payments count toward the public leaderboard.
+              </p>
+            {:else if mySummary.current_rank && mySummary.amount_to_next_rank && mySummary.next_rank_name}
+              <p class="personal-copy">
+                You need Rs {mySummary.amount_to_next_rank.toLocaleString('en-IN')} more to pass {mySummary.next_rank_name}.
+              </p>
+            {:else if mySummary.current_rank === 1}
+              <p class="personal-copy">You are currently leading the board.</p>
+            {:else}
+              <p class="personal-copy">Make a contribution to start climbing the board.</p>
+            {/if}
+          {:else}
+            <p class="personal-copy">
+              We are getting your rank and contribution stats ready.
+            </p>
+          {/if}
+        </div>
+      {/if}
     </div>
   </section>
 
-  <!-- LEADERBOARD + FEED -->
   <div class="content">
-
     <section class="leaderboard">
       <div class="section-header">
-        <h2>🏆 Top Supporters</h2>
+        <h2>Top Supporters</h2>
       </div>
       <div class="board">
-        {#each leaderboard as user, i}
-          <div class="card rank-{i}">
-            <div class="rank-badge rank-{i}">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}</div>
+        {#each leaderboard as user, index}
+          <div class="card" class:champion={index === 0} class:elite={index < 3}>
+            <div class="rank-badge" class:medal-badge={index < 3} class:gold={index === 0} class:silver={index === 1} class:bronze={index === 2}>
+              {getMedal(index)}
+            </div>
             <div class="card-info">
               <span class="card-name">{user.name}</span>
+              {#if index < 3}
+                <span class="card-tier">{getTierLabel(index)}</span>
+              {/if}
             </div>
-            <div class="card-amount">₹{user.amount.toLocaleString('en-IN')}</div>
+            <div class="card-amount">Rs {user.amount.toLocaleString('en-IN')}</div>
           </div>
         {:else}
           <div class="empty">
-            <p>🚀 No supporters yet</p>
-            <span>Be the first to get on the board!</span>
+            <p>No supporters yet</p>
+            <span>Be the first to get on the board.</span>
           </div>
         {/each}
       </div>
@@ -180,31 +312,34 @@
 
     <section class="feed">
       <div class="section-header">
-        <h2>⚡ Live Activity</h2>
+        <h2>Live Activity</h2>
         <span class="live-dot"></span>
       </div>
       <div class="feed-box">
-        {#each activities as act}
-          <div class="feed-item">{act.text}</div>
+        {#each activities as activity}
+          <div class="feed-item">{activity.text}</div>
         {:else}
           <div class="empty">
-            <p>⚡ Waiting for activity</p>
-            <span>Actions will appear here in real-time</span>
+            <p>Waiting for activity</p>
+            <span>New payments will show up here in real time.</span>
           </div>
         {/each}
       </div>
     </section>
-
   </div>
-
 </div>
 
 {#if showSuccess}
   <div class="success-overlay">
     <div class="success-burst">
-      <div class="success-icon">🔥</div>
-      <p class="success-text">You're on the board!</p>
-      <p class="success-amount">₹{amount} contributed</p>
+      <div class="success-glow success-glow-a"></div>
+      <div class="success-glow success-glow-b"></div>
+      <div class="success-orbit"></div>
+      <div class="success-icon">✓</div>
+      <p class="success-kicker">Payment successful</p>
+      <p class="success-text">You are on the board.</p>
+      <p class="success-amount">Rs {amount.toLocaleString('en-IN')} contributed</p>
+      <p class="success-copy">{getSuccessMessage()}</p>
     </div>
   </div>
 {/if}
@@ -219,109 +354,60 @@
 
   .page {
     min-height: 100vh;
-    background: #080808;
+    background:
+      radial-gradient(circle at top, rgba(255, 77, 77, 0.12), transparent 28%),
+      radial-gradient(circle at 80% 20%, rgba(255, 204, 0, 0.08), transparent 24%),
+      #080808;
     color: white;
     font-family: 'Inter', sans-serif;
     overflow-x: hidden;
   }
 
-  /* NAV */
-  .nav {
-    position: fixed;
-    top: 0; left: 0; right: 0;
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 32px;
-    background: rgba(8,8,8,0.8);
-    backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-  }
-
-  .logo {
-    font-size: 1.2rem;
-    font-weight: 800;
-    background: linear-gradient(90deg, #ff4d4d, #ffcc00);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-
-  .nav-links { display: flex; gap: 8px; }
-
-  .nav-btn {
-    padding: 7px 16px;
-    border-radius: 20px;
-    border: 1px solid rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.05);
-    color: white;
-    font-size: 13px;
-    cursor: pointer;
-    text-decoration: none;
-    display: inline-block;
-    transition: background 0.2s ease;
-  }
-
-  .nav-btn:hover { background: rgba(255,255,255,0.1); }
-
-  .nav-btn.primary {
-    background: linear-gradient(90deg, #ff4d4d, #ffcc00);
-    color: black;
-    font-weight: 700;
-    border: none;
-  }
-
-  /* HERO */
   .hero {
-    text-align: center;
-    padding: 140px 20px 80px;
     position: relative;
-    overflow: hidden;
+    padding: 140px 20px 72px;
+    text-align: center;
   }
 
-  .glow-1 {
+  .glow {
     position: absolute;
-    width: 600px; height: 600px;
-    background: radial-gradient(circle, rgba(255,77,77,0.18), transparent 70%);
-    top: -100px; left: 50%;
-    transform: translateX(-50%);
-    filter: blur(40px);
-    pointer-events: none;
-  }
-
-  .glow-2 {
-    position: absolute;
-    width: 400px; height: 400px;
-    background: radial-gradient(circle, rgba(255,204,0,0.1), transparent 70%);
-    top: 60px; left: 60%;
+    border-radius: 999px;
     filter: blur(60px);
     pointer-events: none;
+  }
+
+  .glow-a {
+    width: 520px;
+    height: 520px;
+    top: -120px;
+    left: 45%;
+    background: rgba(255, 77, 77, 0.18);
+    transform: translateX(-50%);
+  }
+
+  .glow-b {
+    width: 340px;
+    height: 340px;
+    top: 40px;
+    left: 64%;
+    background: rgba(255, 204, 0, 0.12);
   }
 
   .badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 14px;
-    border-radius: 20px;
-    border: 1px solid rgba(255,77,77,0.3);
-    background: rgba(255,77,77,0.08);
+    padding: 7px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 77, 77, 0.3);
+    background: rgba(255, 77, 77, 0.08);
     font-size: 12px;
-    color: #ff8080;
+    color: #ff9a9a;
     margin-bottom: 24px;
-    animation: pulse 2s infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
   }
 
   h1 {
-    font-size: clamp(2.8rem, 7vw, 5rem);
-    font-weight: 900;
-    line-height: 1.1;
+    font-size: clamp(2.9rem, 7vw, 5rem);
+    line-height: 1.05;
     margin: 0 0 16px;
     letter-spacing: -2px;
   }
@@ -334,15 +420,16 @@
   }
 
   .sub {
-    color: #888;
-    font-size: 1.1rem;
-    margin: 0 0 12px;
+    color: #979797;
+    font-size: 1.05rem;
+    max-width: 620px;
+    margin: 0 auto 14px;
   }
 
   .welcome {
+    margin: 0;
+    color: #9b9b9b;
     font-size: 14px;
-    color: #888;
-    margin: 8px 0 0;
   }
 
   .name-highlight {
@@ -350,64 +437,29 @@
     font-weight: 600;
   }
 
-  /* STATS BAR */
-  .hero-body {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: stretch;
-    width: 420px;
-    max-width: calc(100vw - 40px);
-    margin-top: 28px;
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 420px) minmax(0, 340px);
+    gap: 20px;
+    justify-content: center;
+    align-items: start;
+    max-width: 860px;
+    margin: 30px auto 0;
   }
 
-  .stats-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin: 12px 0 0;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 16px;
-    padding: 16px 28px;
+  .form-card,
+  .personal-card,
+  .card,
+  .feed-item {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(8px);
   }
 
-  .stat {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .stat-value {
-    font-size: 1.4rem;
-    font-weight: 800;
-    background: linear-gradient(90deg, #ff4d4d, #ffcc00);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-
-  .stat-label {
-    font-size: 11px;
-    color: #555;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
-
-  .stat-divider {
-    width: 1px;
-    height: 36px;
-    background: rgba(255,255,255,0.08);
-  }
-
-  /* FORM CARD */
-  .form-card {
-    width: 100%;
-    box-sizing: border-box;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 20px;
-    padding: 28px 32px;
+  .form-card,
+  .personal-card {
+    border-radius: 24px;
+    padding: 28px 30px;
     text-align: left;
   }
 
@@ -423,36 +475,29 @@
     min-width: 120px;
     padding: 11px 16px;
     border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.1);
-    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.06);
     color: white;
     font-size: 14px;
     outline: none;
-    transition: border-color 0.2s;
   }
-
-  .inputs input:focus { border-color: #ff4d4d; }
-  .inputs input::placeholder { color: #555; }
-  .inputs input:disabled { opacity: 0.5; }
 
   .amount-wrap {
     flex: 1;
     min-width: 120px;
     display: flex;
     align-items: center;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
     overflow: hidden;
-    transition: border-color 0.2s;
   }
-
-  .amount-wrap:focus-within { border-color: #ff4d4d; }
 
   .rupee {
     padding: 0 10px 0 14px;
-    color: #888;
-    font-size: 15px;
+    color: #8e8e8e;
+    font-size: 13px;
+    font-weight: 700;
   }
 
   .amount-wrap input {
@@ -466,9 +511,6 @@
     padding: 11px 14px 11px 0;
   }
 
-  .amount-wrap input::placeholder { color: #555; }
-
-  /* QUICK AMOUNTS */
   .quick-amounts {
     display: flex;
     gap: 8px;
@@ -478,44 +520,27 @@
 
   .quick-btn {
     padding: 6px 14px;
-    border-radius: 20px;
-    border: 1px solid rgba(255,255,255,0.1);
-    background: rgba(255,255,255,0.04);
-    color: #aaa;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    color: #b0b0b0;
     font-size: 13px;
     cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .quick-btn:hover {
-    border-color: #ff4d4d;
-    color: white;
   }
 
   .quick-btn.active {
-    background: rgba(255,77,77,0.15);
+    background: rgba(255, 77, 77, 0.18);
     border-color: #ff4d4d;
-    color: #ff8080;
-    font-weight: 600;
+    color: white;
   }
-
-  .quick-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .anon-toggle {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     margin-bottom: 16px;
-    color: #666;
+    color: #8e8e8e;
     font-size: 13px;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .anon-toggle input[type='checkbox'] {
-    accent-color: #ff4d4d;
-    width: 14px; height: 14px;
-    cursor: pointer;
   }
 
   .cta {
@@ -528,200 +553,380 @@
     font-weight: 800;
     font-size: 15px;
     cursor: pointer;
-    transition: opacity 0.2s, transform 0.1s;
-    letter-spacing: 0.3px;
   }
 
-  .cta:hover:not(:disabled) { transform: translateY(-1px); opacity: 0.92; }
-  .cta:active:not(:disabled) { transform: translateY(0); }
-  .cta:disabled { opacity: 0.5; cursor: not-allowed; }
+  .cta:disabled,
+  .quick-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
-  /* CONTENT */
-  .content {
+  .stats-bar {
     display: flex;
-    gap: 24px;
-    justify-content: center;
-    padding: 60px 32px;
-    flex-wrap: wrap;
-    max-width: 900px;
-    margin: 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 14px;
+    padding: 16px 20px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+    text-align: center;
+  }
+
+  .stat-value {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #fff2b6;
+  }
+
+  .stat-label,
+  .personal-label {
+    color: #757575;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .stat-divider {
+    width: 1px;
+    height: 38px;
+    background: rgba(255, 255, 255, 0.08);
   }
 
   .section-header {
     display: flex;
     align-items: center;
-    gap: 10px;
+    justify-content: space-between;
+    gap: 12px;
     margin-bottom: 16px;
   }
 
   .section-header h2 {
-    font-size: 1rem;
-    font-weight: 700;
-    color: #ccc;
     margin: 0;
+    font-size: 0.96rem;
     text-transform: uppercase;
     letter-spacing: 1px;
+    color: #d1d1d1;
   }
 
-  .live-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: #22c55e;
-    box-shadow: 0 0 6px #22c55e;
-    animation: pulse 1.5s infinite;
+  .personal-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
   }
 
-  /* LEADERBOARD */
-  .leaderboard { width: 400px; max-width: 100%; }
+  .personal-stat {
+    padding: 14px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+  }
 
-  .board { display: flex; flex-direction: column; gap: 8px; }
+  .personal-stat strong {
+    display: block;
+    margin-top: 7px;
+    font-size: 1rem;
+    line-height: 1.4;
+  }
+
+  .personal-copy {
+    margin: 16px 0 0;
+    color: #969696;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .content {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    padding: 0 32px 70px;
+    flex-wrap: wrap;
+    max-width: 940px;
+    margin: 0 auto;
+  }
+
+  .leaderboard {
+    width: 420px;
+    max-width: 100%;
+  }
+
+  .feed {
+    width: 390px;
+    max-width: 100%;
+  }
+
+  .board,
+  .feed-box {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
 
   .card {
-    padding: 14px 16px;
-    border-radius: 14px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.06);
     display: flex;
     align-items: center;
     gap: 14px;
-    transition: transform 0.2s, background 0.2s;
+    padding: 14px 16px;
+    border-radius: 16px;
   }
 
-  .card:hover {
-    transform: translateX(4px);
-    background: rgba(255,255,255,0.07);
+  .card.champion {
+    border-color: rgba(255, 204, 0, 0.28);
+    background: rgba(255, 204, 0, 0.07);
   }
 
-  .card.rank-0 { border-color: rgba(255,215,0,0.3); background: rgba(255,215,0,0.05); }
-  .card.rank-1 { border-color: rgba(192,192,192,0.25); }
-  .card.rank-2 { border-color: rgba(205,127,50,0.25); }
+  .card.elite {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
 
   .rank-badge {
-    font-size: 1.3rem;
-    width: 32px;
+    width: 38px;
+    font-weight: 800;
+    color: #ffcc00;
     text-align: center;
     flex-shrink: 0;
   }
 
-  .card-info { flex: 1; }
+  .medal-badge {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    font-size: 1.25rem;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
+
+  .medal-badge.gold {
+    background: radial-gradient(circle at 30% 30%, #fff0a8, #ffcb3d 60%, #a86e00);
+    color: #3c2700;
+  }
+
+  .medal-badge.silver {
+    background: radial-gradient(circle at 30% 30%, #ffffff, #cfd5de 60%, #818a96);
+    color: #28303a;
+  }
+
+  .medal-badge.bronze {
+    background: radial-gradient(circle at 30% 30%, #ffd3a1, #d68435 60%, #7c4514);
+    color: #2d1605;
+  }
+
+  .card-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
 
   .card-name {
     font-size: 15px;
     font-weight: 600;
-    color: #eee;
+    color: #f0f0f0;
+  }
+
+  .card-tier {
+    color: #7f7f7f;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
   }
 
   .card-amount {
     font-size: 15px;
     font-weight: 700;
-    color: #ffcc00;
+    color: #ffdf71;
   }
 
-  /* FEED */
-  .feed { width: 380px; max-width: 100%; }
-
-  .feed-box {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    max-height: 420px;
-    overflow: hidden;
+  .live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: #22c55e;
+    box-shadow: 0 0 8px #22c55e;
   }
 
   .feed-item {
     padding: 12px 16px;
-    border-radius: 12px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+    color: #d0d0d0;
     font-size: 14px;
-    color: #ccc;
-    animation: slideIn 0.3s ease;
   }
 
   .empty {
-    padding: 32px 20px;
-    text-align: center;
+    padding: 28px 20px;
     border-radius: 14px;
-    border: 1px dashed rgba(255,255,255,0.08);
+    text-align: center;
+    border: 1px dashed rgba(255, 255, 255, 0.08);
   }
 
   .empty p {
-    font-size: 15px;
-    color: #555;
     margin: 0 0 6px;
+    color: #6c6c6c;
   }
 
   .empty span {
+    color: #555;
     font-size: 12px;
-    color: #333;
   }
 
-  /* ANIMATIONS */
-  @keyframes slideIn {
-    from { transform: translateY(8px); opacity: 0; }
-    to   { transform: translateY(0);   opacity: 1; }
-  }
-
-  /* SUCCESS OVERLAY */
   .success-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.8);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
-    animation: fadeIn 0.2s ease;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 200;
   }
 
   .success-burst {
+    position: relative;
     text-align: center;
-    animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    padding: 38px 34px;
+    width: min(360px, calc(100vw - 40px));
+    border-radius: 28px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
+      rgba(10, 10, 10, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+  }
+
+  .success-glow {
+    position: absolute;
+    border-radius: 999px;
+    filter: blur(40px);
+    pointer-events: none;
+  }
+
+  .success-glow-a {
+    width: 180px;
+    height: 180px;
+    top: -60px;
+    left: -10px;
+    background: rgba(255, 77, 77, 0.28);
+  }
+
+  .success-glow-b {
+    width: 160px;
+    height: 160px;
+    top: -30px;
+    right: -20px;
+    background: rgba(255, 204, 0, 0.22);
+  }
+
+  .success-orbit {
+    position: absolute;
+    inset: 18px;
+    border-radius: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .success-icon {
-    font-size: 80px;
-    animation: bounce 0.6s ease 0.2s both;
+    position: relative;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 14px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, #ffea8f, #ff9f3f);
+    color: #201200;
+    font-size: 2rem;
+    font-weight: 900;
+    box-shadow: 0 10px 30px rgba(255, 169, 64, 0.3);
+  }
+
+  .success-kicker {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    color: #ffcf78;
+    font-size: 12px;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
   }
 
   .success-text {
+    position: relative;
+    z-index: 1;
+    margin: 10px 0 8px;
     font-size: 2rem;
     font-weight: 800;
-    background: linear-gradient(90deg, #ff4d4d, #ffcc00);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin: 14px 0 6px;
   }
 
-  .success-amount { color: #888; font-size: 15px; }
-
-  @keyframes fadeIn {
-    from { opacity: 0; } to { opacity: 1; }
+  .success-amount {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    color: #f3f3f3;
+    font-size: 1.05rem;
+    font-weight: 700;
   }
 
-  @keyframes popIn {
-    from { transform: scale(0.6); opacity: 0; }
-    to   { transform: scale(1);   opacity: 1; }
+  .success-copy {
+    position: relative;
+    z-index: 1;
+    margin: 14px 0 0;
+    color: #aaaaaa;
+    line-height: 1.5;
+    font-size: 14px;
   }
 
-  @keyframes bounce {
-    0%   { transform: scale(0.5) rotate(-10deg); opacity: 0; }
-    60%  { transform: scale(1.2) rotate(5deg); }
-    100% { transform: scale(1)   rotate(0deg); opacity: 1; }
+  @media (max-width: 900px) {
+    .hero-grid {
+      grid-template-columns: 1fr;
+      max-width: 460px;
+    }
   }
 
-  /* MOBILE */
   @media (max-width: 600px) {
-    .nav { padding: 14px 20px; }
-    .hero { padding: 110px 16px 60px; }
-    h1 { letter-spacing: -1px; }
-    .hero-body { width: 100%; }
-    .stats-bar { padding: 14px 20px; }
-    .form-card { padding: 20px; }
-    .content { padding: 32px 16px; }
-    .leaderboard, .feed { width: 100%; }
-    .inputs { flex-direction: column; }
-    .amount-wrap, .inputs input { width: 100%; }
+    .hero {
+      padding: 116px 16px 56px;
+    }
+
+    .form-card,
+    .personal-card {
+      padding: 20px;
+    }
+
+    .stats-bar {
+      padding: 14px 12px;
+      gap: 8px;
+    }
+
+    .stat-value {
+      font-size: 0.96rem;
+    }
+
+    .personal-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .content {
+      padding: 0 16px 48px;
+    }
+
+    .leaderboard,
+    .feed {
+      width: 100%;
+    }
+
+    .success-burst {
+      padding: 34px 22px;
+    }
   }
 </style>
