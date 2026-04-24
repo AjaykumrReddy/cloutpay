@@ -9,16 +9,16 @@ interface AuthState {
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 function createAuthStore() {
-	const initial: AuthState | null = (() => {
-		if (typeof localStorage === 'undefined') return null;
-		const raw = localStorage.getItem('cp_auth');
-		return raw ? JSON.parse(raw) : null;
-	})();
-
-	const { subscribe, set, update } = writable<AuthState | null>(initial);
+	// Start as null — will be hydrated on client via init() called from layout onMount
+	const { subscribe, set, update } = writable<AuthState | null>(null);
 
 	return {
 		subscribe,
+		// Called once in +layout.svelte onMount — safe to access localStorage here
+		init() {
+			const raw = localStorage.getItem('cp_auth');
+			if (raw) set(JSON.parse(raw));
+		},
 		setAuth(token: string, display_name: string | null) {
 			const state = { token, display_name };
 			localStorage.setItem('cp_auth', JSON.stringify(state));

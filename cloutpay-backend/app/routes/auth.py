@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -6,21 +6,9 @@ import re
 
 from app.db import get_db
 from app.services import auth_service
+from app.dependencies import get_current_user_id
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def get_current_user_id(authorization: Optional[str] = Header(None)) -> int:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    token = authorization.split(" ", 1)[1]
-    try:
-        payload = auth_service.decode_token(token)
-        return int(payload["sub"])
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
 # ── Request schemas ───────────────────────────────────────────────────────────

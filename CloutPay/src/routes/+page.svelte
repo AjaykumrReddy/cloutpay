@@ -3,7 +3,7 @@
   import { PUBLIC_WS_URL } from '$env/static/public';
   import { initiatePayment } from '$lib/razorpay';
   import { getLeaderboard } from '$lib/api';
-  import { authStore, isLoggedIn, displayName } from '$lib/auth';
+  import { authStore, isLoggedIn, displayName, authToken } from '$lib/auth';
 
   let leaderboard = $state<{ name: string; amount: number }[]>([]);
   let activities = $state<{ text: string }[]>([]);
@@ -24,7 +24,7 @@
     if (amount < 10) { error = 'Minimum amount is ₹10'; return; }
     paying = true;
     try {
-      await initiatePayment(amount, name);
+      await initiatePayment(amount, name, $authToken);
     } catch (e: any) {
       error = e?.message || 'Payment failed';
     } finally {

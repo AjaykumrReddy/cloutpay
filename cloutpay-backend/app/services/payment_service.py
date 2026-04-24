@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from app.models.payment import PaymentOrder, Payment
+from app.models.users import User
 from app.services.razorpay_service import client
 import hmac, hashlib, os
 
@@ -34,13 +35,11 @@ class PaymentService:
             "currency": "INR"
         }
 
-    def verify_payment(self, data: dict) -> Payment:
+    def verify_payment(self, data: dict, user_id: int | None = None) -> Payment:
         order_id = data["razorpay_order_id"]
         payment_id = data["razorpay_payment_id"]
         signature = data["razorpay_signature"]
-        user_name = data.get("user_name") or "Anonymous"
 
-        # Bug fix: hmac.new → hmac.new is invalid; correct is hmac.new
         body = f"{order_id}|{payment_id}"
         expected = hmac.new(
             os.getenv("RAZORPAY_KEY_SECRET", "").encode("utf-8"),
@@ -63,6 +62,15 @@ class PaymentService:
             existing = self.db.query(Payment).filter_by(order_id=order.id).first()
             if existing:
                 return existing
+
+        # Resolve display name: trust DB over client input
+        user_name = "Anonymous"
+        if user_id:
+            user = self.db.query(User).filter_by(id=user_id).first()
+            if user:
+                user_name = user.display_name or user.phone_number
+        else:
+            user_name = data.get("user_name") or "Anonymous"
 
         order.status = "paid"
 

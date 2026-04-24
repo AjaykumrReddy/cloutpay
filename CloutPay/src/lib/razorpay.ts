@@ -13,10 +13,10 @@ function loadRazorpayScript(): Promise<void> {
 	});
 }
 
-export async function initiatePayment(amount: number, userName: string) {
+export async function initiatePayment(amount: number, userName: string, token?: string | null) {
 	await loadRazorpayScript();
 
-	const order = await createOrder(amount);
+	const order = await createOrder(amount, token);
 
 	return new Promise((resolve, reject) => {
 		const rzp = new (window as any).Razorpay({
@@ -28,12 +28,15 @@ export async function initiatePayment(amount: number, userName: string) {
 			description: 'Support & Climb the Leaderboard',
 			handler: async (response: Record<string, string>) => {
 				try {
-					const result = await verifyPayment({
-						razorpay_order_id: order.order_id,
-						razorpay_payment_id: response.razorpay_payment_id,
-						razorpay_signature: response.razorpay_signature,
-						user_name: userName
-					});
+					const result = await verifyPayment(
+						{
+							razorpay_order_id: order.order_id,
+							razorpay_payment_id: response.razorpay_payment_id,
+							razorpay_signature: response.razorpay_signature,
+							user_name: userName  // used only for guests; ignored for logged-in users
+						},
+						token
+					);
 					resolve(result);
 				} catch (e) {
 					reject(e);

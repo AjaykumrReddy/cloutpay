@@ -1,9 +1,15 @@
 import { PUBLIC_API_BASE } from '$env/static/public';
 
-export async function createOrder(amount: number) {
+function authHeaders(token?: string | null): Record<string, string> {
+	const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+	if (token) headers['Authorization'] = `Bearer ${token}`;
+	return headers;
+}
+
+export async function createOrder(amount: number, token?: string | null) {
 	const res = await fetch(`${PUBLIC_API_BASE}/payments/create-order`, {
 		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
+		headers: authHeaders(token),
 		body: JSON.stringify({ amount })
 	});
 	if (!res.ok) throw new Error('Failed to create order');
@@ -16,10 +22,10 @@ export async function getLeaderboard() {
 	return res.json();
 }
 
-export async function verifyPayment(data: Record<string, string>) {
+export async function verifyPayment(data: Record<string, string>, token?: string | null) {
 	const res = await fetch(`${PUBLIC_API_BASE}/payments/verify-payment`, {
 		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
+		headers: authHeaders(token),
 		body: JSON.stringify(data)
 	});
 	if (!res.ok) throw new Error('Payment verification failed');
