@@ -22,6 +22,14 @@ export async function getLeaderboard() {
 	return res.json();
 }
 
+export async function getHistory(token: string) {
+	const res = await fetch(`${PUBLIC_API_BASE}/payments/history`, {
+		headers: authHeaders(token)
+	});
+	if (!res.ok) throw new Error('Failed to fetch history');
+	return res.json();
+}
+
 export async function verifyPayment(data: Record<string, string>, token?: string | null) {
 	const res = await fetch(`${PUBLIC_API_BASE}/payments/verify-payment`, {
 		method: 'POST',

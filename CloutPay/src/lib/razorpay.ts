@@ -13,7 +13,7 @@ function loadRazorpayScript(): Promise<void> {
 	});
 }
 
-export async function initiatePayment(amount: number, userName: string, token?: string | null) {
+export async function initiatePayment(amount: number, userName: string, token?: string | null, anonymous = false) {
 	await loadRazorpayScript();
 
 	const order = await createOrder(amount, token);
@@ -26,6 +26,9 @@ export async function initiatePayment(amount: number, userName: string, token?: 
 			order_id: order.order_id,
 			name: 'CloutPay',
 			description: 'Support & Climb the Leaderboard',
+			modal: {
+				ondismiss: () => reject(new Error('cancelled'))
+			},
 			handler: async (response: Record<string, string>) => {
 				try {
 					const result = await verifyPayment(
@@ -33,7 +36,8 @@ export async function initiatePayment(amount: number, userName: string, token?: 
 							razorpay_order_id: order.order_id,
 							razorpay_payment_id: response.razorpay_payment_id,
 							razorpay_signature: response.razorpay_signature,
-							user_name: userName  // used only for guests; ignored for logged-in users
+							user_name: userName,
+							anonymous: String(anonymous)
 						},
 						token
 					);
@@ -42,7 +46,7 @@ export async function initiatePayment(amount: number, userName: string, token?: 
 					reject(e);
 				}
 			},
-			prefill: { name: userName },
+			prefill: { name: anonymous ? '' : userName },
 			theme: { color: '#ff4d4d' }
 		});
 		rzp.on('payment.failed', (res: any) => reject(new Error(res.error.description)));

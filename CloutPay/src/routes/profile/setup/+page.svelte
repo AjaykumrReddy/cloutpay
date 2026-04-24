@@ -2,16 +2,15 @@
   import { goto } from '$app/navigation';
   import { get } from 'svelte/store';
   import { authStore, authToken, updateProfile } from '$lib/auth';
+  import { toast } from '$lib/toast';
 
   let displayName = $state('');
   let loading = $state(false);
-  let error = $state('');
 
   async function handleSave() {
-    error = '';
     const name = displayName.trim();
-    if (name.length < 2) { error = 'Name must be at least 2 characters'; return; }
-    if (name.length > 30) { error = 'Name must be under 30 characters'; return; }
+    if (name.length < 2) { toast.error('Name must be at least 2 characters'); return; }
+    if (name.length > 30) { toast.error('Name must be under 30 characters'); return; }
 
     const token = get(authToken);
     if (!token) { goto('/login'); return; }
@@ -20,16 +19,13 @@
     try {
       const saved = await updateProfile(token, name);
       authStore.setDisplayName(saved);
+      toast.success('Profile saved 🎉');
       goto('/');
     } catch (e: any) {
-      error = e.message;
+      toast.error(e.message);
     } finally {
       loading = false;
     }
-  }
-
-  function handleSkip() {
-    goto('/');
   }
 </script>
 
@@ -51,15 +47,11 @@
       onkeydown={(e) => e.key === 'Enter' && handleSave()}
     />
 
-    {#if error}
-      <p class="error">{error}</p>
-    {/if}
-
     <button class="btn" onclick={handleSave} disabled={loading}>
       {loading ? 'Saving...' : 'Save & Continue 🚀'}
     </button>
 
-    <button class="skip" onclick={handleSkip} disabled={loading}>
+    <button class="skip" onclick={() => goto('/')} disabled={loading}>
       Skip for now
     </button>
   </div>
@@ -169,10 +161,4 @@
   }
 
   .skip:hover { color: #888; }
-
-  .error {
-    color: #ff4d4d;
-    font-size: 13px;
-    margin-bottom: 10px;
-  }
 </style>

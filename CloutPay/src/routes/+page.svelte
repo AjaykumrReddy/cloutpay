@@ -4,6 +4,7 @@
   import { initiatePayment } from '$lib/razorpay';
   import { getLeaderboard } from '$lib/api';
   import { authStore, isLoggedIn, displayName, authToken } from '$lib/auth';
+  import { toast } from '$lib/toast';
 
   let leaderboard = $state<{ name: string; amount: number }[]>([]);
   let activities = $state<{ text: string }[]>([]);
@@ -11,22 +12,27 @@
   let paying = $state(false);
   let amount = $state(100);
   let userName = $state('');
-  let error = $state('');
+  let anonymous = $state(false);
+  let showSuccess = $state(false);
 
   function logout() {
     authStore.clear();
+    toast.info('Logged out');
   }
 
   async function handlePayment() {
-    error = '';
-    // Use saved display name if logged in, else use input
-    const name = $displayName || userName.trim() || 'Anonymous';
-    if (amount < 10) { error = 'Minimum amount is ₹10'; return; }
+    const name = anonymous ? 'Anonymous' : ($displayName || userName.trim() || 'Anonymous');
+    if (amount < 10) { toast.error('Minimum amount is ₹10'); return; }
     paying = true;
     try {
-      await initiatePayment(amount, name, $authToken);
+      await initiatePayment(amount, name, $authToken, anonymous);
+      showSuccess = true;
+      toast.success(`₹${amount} contributed! You\'re on the board 🔥`);
+      setTimeout(() => showSuccess = false, 2800);
     } catch (e: any) {
-      error = e?.message || 'Payment failed';
+      if (e?.message !== 'cancelled') {
+        toast.error(e?.message || 'Payment failed');
+      }
     } finally {
       paying = false;
     }
@@ -39,6 +45,9 @@
       const data = JSON.parse(event.data);
       if (data.type === 'NEW_ACTIVITY') {
         activities = [data.payload, ...activities].slice(0, 10);
+      }
+      if (data.type === 'INIT_ACTIVITIES') {
+        activities = data.payload;
       }
       if (data.type === 'UPDATE_LEADERBOARD') {
         leaderboard = data.payload;
@@ -66,6 +75,7 @@
 
     <div class="nav">
       {#if $isLoggedIn}
+        <a href="/history" class="nav-btn">History</a>
         <button class="nav-btn" onclick={logout}>Logout</button>
       {:else}
         <a href="/login" class="nav-btn">Login</a>
@@ -85,7 +95,7 @@
           type="text"
           placeholder="Your name (optional)"
           bind:value={userName}
-          disabled={paying}
+          disabled={paying || anonymous}
         />
       {/if}
       <input
@@ -97,9 +107,10 @@
       />
     </div>
 
-    {#if error}
-      <p class="error">{error}</p>
-    {/if}
+    <label class="anon-toggle">
+      <input type="checkbox" bind:checked={anonymous} disabled={paying} />
+      <span>Stay anonymous 🕵️</span>
+    </label>
 
     <button class="cta" onclick={handlePayment} disabled={paying}>
       {paying ? 'Processing...' : '🚀 Get on the Board'}
@@ -119,6 +130,8 @@
             <div class="name">{user.name}</div>
             <div class="amount">₹{user.amount}</div>
           </div>
+        {:else}
+          <div class="empty">No supporters yet. Be the first! 🚀</div>
         {/each}
       </div>
     </section>
@@ -132,6 +145,8 @@
           <div class="feed-item">
             {act.text}
           </div>
+        {:else}
+          <div class="empty">Waiting for activity... ⚡</div>
         {/each}
       </div>
     </section>
@@ -139,6 +154,16 @@
   </div>
 
 </div>
+
+{#if showSuccess}
+  <div class="success-overlay">
+    <div class="success-burst">
+      <div class="success-icon">🔥</div>
+      <p class="success-text">You're on the board!</p>
+      <p class="success-amount">₹{amount} contributed</p>
+    </div>
+  </div>
+{/if}
 
 <style>
   .page {
@@ -158,6 +183,8 @@
     position: absolute;
     top: 24px;
     right: 28px;
+    display: flex;
+    gap: 8px;
   }
 
   .nav-btn {
@@ -244,10 +271,29 @@
     border-color: #ff4d4d;
   }
 
-  .error {
-    color: #ff4d4d;
+  .anon-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    color: #aaa;
     font-size: 13px;
-    margin-top: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .anon-toggle input[type='checkbox'] {
+    accent-color: #ff4d4d;
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+  }
+
+  .empty {
+    color: #555;
+    font-size: 14px;
+    text-align: center;
+    padding: 20px 0;
   }
 
   .content {
@@ -261,6 +307,7 @@
   /* Leaderboard */
   .leaderboard {
     width: 350px;
+    max-width: 100%;
   }
 
   .board {
@@ -285,6 +332,7 @@
   /* Feed */
   .feed {
     width: 350px;
+    max-width: 100%;
   }
 
   .feed-box {
@@ -293,6 +341,41 @@
     gap: 10px;
     max-height: 400px;
     overflow: hidden;
+  }
+
+  @media (max-width: 480px) {
+    .hero {
+      padding: 80px 16px 40px;
+    }
+
+    .hero h1 {
+      font-size: 2.4rem;
+    }
+
+    .content {
+      padding: 20px 16px;
+      gap: 20px;
+    }
+
+    .leaderboard,
+    .feed {
+      width: 100%;
+    }
+
+    .inputs {
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .inputs input {
+      width: 100%;
+      max-width: 300px;
+    }
+
+    .nav {
+      top: 16px;
+      right: 16px;
+    }
   }
 
   .feed-item {
@@ -323,5 +406,58 @@
     left: 50%;
     transform: translateX(-50%);
     filter: blur(120px);
+  }
+
+  /* Success overlay */
+  .success-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.2s ease;
+  }
+
+  .success-burst {
+    text-align: center;
+    animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  .success-icon {
+    font-size: 72px;
+    animation: bounce 0.6s ease 0.2s both;
+  }
+
+  .success-text {
+    font-size: 1.8rem;
+    font-weight: 700;
+    background: linear-gradient(90deg, #ff4d4d, #ffcc00);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 12px 0 6px;
+  }
+
+  .success-amount {
+    color: #aaa;
+    font-size: 15px;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  @keyframes popIn {
+    from { transform: scale(0.6); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+  }
+
+  @keyframes bounce {
+    0%   { transform: scale(0.5) rotate(-10deg); opacity: 0; }
+    60%  { transform: scale(1.2) rotate(5deg); }
+    100% { transform: scale(1)   rotate(0deg); opacity: 1; }
   }
 </style>

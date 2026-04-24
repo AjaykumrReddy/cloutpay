@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { sendOtp, verifyOtp, authStore } from '$lib/auth';
+  import { toast } from '$lib/toast';
 
   type Step = 'phone' | 'otp';
 
@@ -8,44 +9,41 @@
   let phone = $state('');
   let code = $state('');
   let loading = $state(false);
-  let error = $state('');
 
   async function handleSendOtp() {
-    error = '';
     if (!/^[6-9]\d{9}$/.test(phone.trim())) {
-      error = 'Enter a valid 10-digit Indian mobile number';
+      toast.error('Enter a valid 10-digit Indian mobile number');
       return;
     }
     loading = true;
     try {
       await sendOtp(phone.trim());
       step = 'otp';
+      toast.info('OTP sent to +91 ' + phone.trim());
     } catch (e: any) {
-      error = e.message;
+      toast.error(e.message);
     } finally {
       loading = false;
     }
   }
 
   async function handleVerifyOtp() {
-    error = '';
     if (!/^\d{6}$/.test(code.trim())) {
-      error = 'Enter the 6-digit OTP';
+      toast.error('Enter the 6-digit OTP');
       return;
     }
     loading = true;
     try {
       const result = await verifyOtp(phone.trim(), code.trim());
       authStore.setAuth(result.token, result.display_name);
-
-      // New user with no name → profile setup, else go home
       if (result.is_new_user || !result.display_name) {
         goto('/profile/setup');
       } else {
+        toast.success('Welcome back 🔥');
         goto('/');
       }
     } catch (e: any) {
-      error = e.message;
+      toast.error(e.message);
     } finally {
       loading = false;
     }
@@ -75,7 +73,7 @@
         {loading ? 'Sending...' : 'Send OTP'}
       </button>
     {:else}
-      <p class="hint">OTP sent to +91 {phone} · <button class="link" onclick={() => { step = 'phone'; code = ''; error = ''; }}>Change</button></p>
+      <p class="hint">OTP sent to +91 {phone} · <button class="link" onclick={() => { step = 'phone'; code = ''; }}>Change</button></p>
       <input
         class="otp-input"
         type="tel"
@@ -88,10 +86,6 @@
       <button class="btn" onclick={handleVerifyOtp} disabled={loading}>
         {loading ? 'Verifying...' : 'Verify OTP'}
       </button>
-    {/if}
-
-    {#if error}
-      <p class="error">{error}</p>
     {/if}
 
     <a href="/" class="skip">Continue as guest →</a>
@@ -224,12 +218,6 @@
     font-size: 13px;
     padding: 0;
     text-decoration: underline;
-  }
-
-  .error {
-    color: #ff4d4d;
-    font-size: 13px;
-    margin-top: 12px;
   }
 
   .skip {

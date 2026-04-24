@@ -39,6 +39,7 @@ class PaymentService:
         order_id = data["razorpay_order_id"]
         payment_id = data["razorpay_payment_id"]
         signature = data["razorpay_signature"]
+        is_anonymous = data.get("anonymous") in (True, "true", "True", "1")
 
         body = f"{order_id}|{payment_id}"
         expected = hmac.new(
@@ -63,12 +64,12 @@ class PaymentService:
             if existing:
                 return existing
 
-        # Resolve display name: trust DB over client input
-        user_name = "Anonymous"
-        if user_id:
+        # Resolve display name: anonymous overrides everything
+        if is_anonymous:
+            user_name = "Anonymous"
+        elif user_id:
             user = self.db.query(User).filter_by(id=user_id).first()
-            if user:
-                user_name = user.display_name or user.phone_number
+            user_name = (user.display_name or user.phone_number) if user else "Anonymous"
         else:
             user_name = data.get("user_name") or "Anonymous"
 

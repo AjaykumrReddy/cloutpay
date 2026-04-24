@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import favicon from '$lib/assets/favicon.svg';
 	import { authStore } from '$lib/auth';
+	import Toast from '$lib/Toast.svelte';
 
 	let { children } = $props();
 
@@ -15,3 +16,4 @@
 </svelte:head>
 
 {@render children()}
+<Toast />
