@@ -82,6 +82,8 @@
     font-family: 'Inter', sans-serif;
     color: white;
     padding: 20px;
+    box-sizing: border-box;
+    overflow-x: hidden;
   }
 
   .glow {
@@ -97,6 +99,7 @@
   }
 
   .card {
+    box-sizing: border-box;
     width: min(420px, 100%);
     padding: 34px;
     border-radius: 24px;
@@ -111,6 +114,7 @@
     justify-content: space-between;
     gap: 10px;
     margin-bottom: 24px;
+    flex-wrap: wrap;
   }
 
   .back,
@@ -186,5 +190,16 @@
   .btn:disabled {
     opacity: 0.55;
     cursor: not-allowed;
+  }
+
+  @media (max-width: 540px) {
+    .card {
+      padding: 28px 20px;
+    }
+
+    .topline {
+      flex-direction: column;
+      align-items: flex-start;
+    }
   }
 </style>

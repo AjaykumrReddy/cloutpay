@@ -16,13 +16,19 @@ app = FastAPI()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        origin.strip()
-        for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
-        if origin.strip()
-    ],
+    allow_origins=cors_origins,
+    allow_origin_regex=os.getenv(
+        "CORS_ORIGIN_REGEX",
+        r"https://.*\.ngrok-free\.app|http://localhost(:\d+)?"
+    ),
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -156,6 +156,7 @@
     color: white;
     font-family: 'Inter', sans-serif;
     position: relative;
+    overflow-x: hidden;
   }
 
   .glow {
@@ -176,6 +177,7 @@
     padding: 60px 20px 50px;
     position: relative;
     z-index: 1;
+    box-sizing: border-box;
   }
 
   .header {
@@ -286,6 +288,10 @@
     padding: 16px 18px;
   }
 
+  .row-main {
+    min-width: 0;
+  }
+
   .row-top {
     display: flex;
     justify-content: space-between;
@@ -328,6 +334,8 @@
     color: #666;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 12px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   @media (max-width: 760px) {
@@ -350,6 +358,15 @@
     }
 
     .row-top {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .row {
+      padding: 14px;
+    }
+
+    .row-meta {
       align-items: flex-start;
       flex-direction: column;
     }

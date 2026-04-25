@@ -101,6 +101,9 @@
     justify-content: center;
     font-family: 'Inter', sans-serif;
     position: relative;
+    padding: 20px;
+    box-sizing: border-box;
+    overflow-x: hidden;
   }
 
   .glow {
@@ -116,11 +119,12 @@
   }
 
   .card {
+    box-sizing: border-box;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 20px;
     padding: 40px 36px;
-    width: 360px;
+    width: min(360px, 100%);
     text-align: center;
     color: white;
     position: relative;
@@ -208,6 +212,7 @@
     font-size: 13px;
     color: #888;
     margin-bottom: 14px;
+    overflow-wrap: anywhere;
   }
 
   .link {
@@ -229,4 +234,15 @@
   }
 
   .skip:hover { color: #888; }
+
+  @media (max-width: 540px) {
+    .card {
+      padding: 28px 20px;
+    }
+
+    .otp-input {
+      letter-spacing: 5px;
+      font-size: 20px;
+    }
+  }
 </style>
