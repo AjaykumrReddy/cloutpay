@@ -206,13 +206,26 @@
 </script>
 
 <div class="page">
+
+  {#if activities.length > 0}
+    <div class="ticker-wrap">
+      <div class="ticker-track">
+        {#each [...activities, ...activities] as activity, i}
+          <span class="ticker-item">
+            <span class="ticker-dot"></span>{activity.text}
+          </span>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
   <section class="hero">
     <div class="glow glow-a"></div>
     <div class="glow glow-b"></div>
 
-    <div class="badge">Live board · {activities.length} recent actions</div>
-    <h1>Turn Money Into<br /><span class="gradient-text">Status.</span></h1>
-    <p class="sub">Support the board, climb the ranks, and keep your profile sharp.</p>
+    <div class="badge">🔴 Live board · {activities.length} recent actions</div>
+    <h1>Pay. Rank.<br /><span class="gradient-text">Flex.</span></h1>
+    <p class="sub">The live leaderboard where your money talks. Top spot is open. Someone's about to take it.</p>
 
     {#if $isLoggedIn && $displayName}
       <p class="welcome">Welcome back, <span class="name-highlight">{$displayName}</span></p>
@@ -260,7 +273,7 @@
         </label>
 
         <button class="cta" onclick={handlePayment} disabled={paying}>
-          {paying ? 'Processing...' : 'Get on the board'}
+          {paying ? 'Processing...' : 'Claim your spot'}
         </button>
 
         <div class="stats-bar">
@@ -271,7 +284,7 @@
           <div class="stat-divider"></div>
           <div class="stat">
             <span class="stat-value">{leaderboard.length}</span>
-            <span class="stat-label">Top slots shown</span>
+            <span class="stat-label">On the board</span>
           </div>
           <div class="stat-divider"></div>
           <div class="stat">
@@ -329,7 +342,38 @@
             </p>
           {/if}
         </div>
+      {:else if leaderboard.length > 0}
+        <div class="spotlight-card">
+          <p class="spotlight-label">👑 Currently leading</p>
+          <p class="spotlight-name">{leaderboard[0].name}</p>
+          <p class="spotlight-amount">Rs {leaderboard[0].amount.toLocaleString('en-IN')}</p>
+          <p class="spotlight-copy">Think you can beat them?</p>
+          <a href="/login" class="spotlight-cta">Login to compete</a>
+        </div>
       {/if}
+    </div>
+  </section>
+
+  <section class="how-it-works">
+    <p class="hiw-label">How it works</p>
+    <div class="hiw-steps">
+      <div class="hiw-step">
+        <span class="hiw-num">01</span>
+        <strong>Pay</strong>
+        <p>Contribute any amount — Rs 10 or Rs 10,000. Every rupee counts toward your rank.</p>
+      </div>
+      <div class="hiw-divider"></div>
+      <div class="hiw-step">
+        <span class="hiw-num">02</span>
+        <strong>Rank</strong>
+        <p>Your total contribution places you on the live leaderboard, updated in real time.</p>
+      </div>
+      <div class="hiw-divider"></div>
+      <div class="hiw-step">
+        <span class="hiw-num">03</span>
+        <strong>Flex</strong>
+        <p>Share your rank card. Let everyone know where you stand. Climb higher.</p>
+      </div>
     </div>
   </section>
 
@@ -452,7 +496,7 @@
 
   .hero {
     position: relative;
-    padding: 140px 20px 72px;
+    padding: 200px 20px 72px;
     text-align: center;
   }
 
@@ -490,6 +534,164 @@
     font-size: 12px;
     color: #ff9a9a;
     margin-bottom: 24px;
+  }
+
+  /* ── Ticker ───────────────────────────────────── */
+  .ticker-wrap {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 101;
+    overflow: hidden;
+    background: rgba(8, 8, 8, 0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(255, 77, 77, 0.15);
+    padding: 7px 0;
+  }
+
+  .ticker-track {
+    display: flex;
+    gap: 48px;
+    width: max-content;
+    animation: ticker-scroll 28s linear infinite;
+  }
+
+  .ticker-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #ff9a9a;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+
+  .ticker-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #ff4d4d;
+    flex-shrink: 0;
+  }
+
+  @keyframes ticker-scroll {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+  }
+
+  /* ── Spotlight card (guest) ───────────────────── */
+  .spotlight-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 204, 0, 0.2);
+    backdrop-filter: blur(8px);
+    border-radius: 24px;
+    padding: 28px 30px;
+    text-align: center;
+  }
+
+  .spotlight-label {
+    margin: 0 0 12px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #ffcc00;
+    font-weight: 700;
+  }
+
+  .spotlight-name {
+    margin: 0 0 6px;
+    font-size: 1.6rem;
+    font-weight: 900;
+    letter-spacing: -0.5px;
+    color: white;
+  }
+
+  .spotlight-amount {
+    margin: 0 0 10px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #ffdf71;
+  }
+
+  .spotlight-copy {
+    margin: 0 0 20px;
+    font-size: 13px;
+    color: #666;
+  }
+
+  .spotlight-cta {
+    display: block;
+    padding: 12px;
+    border-radius: 14px;
+    background: linear-gradient(90deg, #ff4d4d, #ffcc00);
+    color: black;
+    font-weight: 800;
+    font-size: 14px;
+    text-decoration: none;
+  }
+
+  /* ── How it works ─────────────────────────────── */
+  .how-it-works {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 0 32px 64px;
+  }
+
+  .hiw-label {
+    margin: 0 0 24px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #555;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .hiw-steps {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+  }
+
+  .hiw-step {
+    flex: 1;
+    padding: 24px 28px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .hiw-num {
+    display: block;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: #ff4d4d;
+    margin-bottom: 10px;
+  }
+
+  .hiw-step strong {
+    display: block;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: white;
+    margin-bottom: 8px;
+  }
+
+  .hiw-step p {
+    margin: 0;
+    font-size: 13px;
+    color: #666;
+    line-height: 1.6;
+  }
+
+  .hiw-divider {
+    width: 40px;
+    flex-shrink: 0;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.07);
+    align-self: center;
   }
 
   h1 {
@@ -1134,11 +1336,20 @@
       grid-template-columns: 1fr;
       max-width: 460px;
     }
+    .hiw-steps {
+      flex-direction: column;
+      gap: 12px;
+    }
+    .hiw-divider {
+      width: 1px;
+      height: 24px;
+      align-self: center;
+    }
   }
 
   @media (max-width: 600px) {
     .hero {
-      padding: 116px 16px 56px;
+      padding: 170px 16px 56px;
     }
 
     .form-card,
@@ -1170,6 +1381,14 @@
 
     .success-burst {
       padding: 34px 22px;
+    }
+
+    .how-it-works {
+      padding: 0 16px 48px;
+    }
+
+    .hiw-step {
+      padding: 18px 20px;
     }
   }
 </style>

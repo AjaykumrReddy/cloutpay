@@ -63,6 +63,7 @@
 		</button>
 
 		{#if mobileMenuOpen}
+			<div class="mobile-backdrop" onclick={closeMenu} role="button" tabindex="-1" aria-label="Close menu" onkeydown={(e) => e.key === 'Escape' && closeMenu()}></div>
 			<div class="mobile-menu">
 				<div class="mobile-menu-glow"></div>
 				{#if $isLoggedIn}
@@ -113,7 +114,7 @@
 
 	.nav {
 		position: fixed;
-		top: 18px;
+		top: calc(33px + 1px);
 		left: 50%;
 		transform: translateX(-50%);
 		z-index: 100;
@@ -234,9 +235,13 @@
 		display: none;
 	}
 
+	.mobile-backdrop {
+		display: none;
+	}
+
 	@media (max-width: 900px) {
 		.nav {
-			top: 14px;
+			top: calc(33px + 14px);
 			width: min(1120px, calc(100vw - 20px));
 			padding: 10px 12px 10px 16px;
 			border-radius: 20px;
@@ -245,7 +250,7 @@
 
 	@media (max-width: 820px) {
 		.nav {
-			top: 10px;
+			top: calc(33px + 10px);
 			width: calc(100vw - 16px);
 			padding: 10px 12px;
 			border-radius: 18px;
@@ -257,6 +262,15 @@
 
 		.menu-toggle {
 			display: inline-flex;
+		}
+
+		.mobile-backdrop {
+			display: block;
+			position: fixed;
+			inset: 0;
+			z-index: 98;
+			background: transparent;
+			cursor: default;
 		}
 
 		.mobile-menu {
