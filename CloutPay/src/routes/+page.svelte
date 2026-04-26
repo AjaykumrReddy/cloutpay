@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { PUBLIC_WS_URL } from '$env/static/public';
-  import { getLeaderboard, getMySummary } from '$lib/api';
-  import { authToken, displayName, isLoggedIn } from '$lib/auth';
+  import { getLeaderboard, getMySummary, AuthError } from '$lib/api';
+  import { authToken, displayName, isLoggedIn, authStore } from '$lib/auth';
   import { initiatePayment } from '$lib/razorpay';
   import { toast } from '$lib/toast';
+
+  type Period = 'all' | 'month';
 
   interface LeaderboardEntry {
     name: string;
@@ -28,6 +30,7 @@
   let leaderboard = $state<LeaderboardEntry[]>([]);
   let activities = $state<ActivityItem[]>([]);
   let mySummary = $state<MySummary | null>(null);
+  let period = $state<Period>('all');
 
   let paying = $state(false);
   let amount = $state(100);
@@ -43,7 +46,7 @@
   });
 
   async function loadLeaderboard() {
-    leaderboard = await getLeaderboard();
+    leaderboard = await getLeaderboard(period === 'month' ? 'month' : undefined);
   }
 
   async function loadMyStats() {
@@ -55,15 +58,29 @@
 
     loadingSummary = true;
     try {
-      mySummary = await getMySummary($authToken);
+      mySummary = await getMySummary($authToken, period === 'month' ? 'month' : undefined);
       loadedSummaryToken = $authToken;
     } catch (e: any) {
+      if (e instanceof AuthError) {
+        authStore.clear();
+        toast.error(e.message);
+        return;
+      }
       toast.error(e?.message || 'Failed to load your stats');
       loadedSummaryToken = $authToken;
     } finally {
       loadingSummary = false;
     }
   }
+
+  $effect(() => {
+    // re-fetch when period changes
+    loadLeaderboard().catch(() => toast.error('Failed to load leaderboard'));
+    if ($isLoggedIn && $authToken) {
+      loadedSummaryToken = undefined;
+      loadMyStats();
+    }
+  });
 
   $effect(() => {
     if (!$isLoggedIn) {
@@ -95,6 +112,11 @@
         showSuccess = false;
       }, 2800);
     } catch (e: any) {
+      if (e instanceof AuthError) {
+        authStore.clear();
+        toast.error(e.message);
+        return;
+      }
       if (e?.message !== 'cancelled') toast.error(e?.message || 'Payment failed');
     } finally {
       paying = false;
@@ -235,6 +257,7 @@
         <div class="personal-card">
           <div class="section-header">
             <h2>Your Standing</h2>
+            <span class="period-label">{period === 'month' ? 'This month' : 'All time'}</span>
           </div>
 
           {#if loadingSummary}
@@ -286,6 +309,10 @@
     <section class="leaderboard">
       <div class="section-header">
         <h2>Top Supporters</h2>
+        <div class="period-toggle">
+          <button class:active={period === 'all'} onclick={() => period = 'all'}>All time</button>
+          <button class:active={period === 'month'} onclick={() => period = 'month'}>This month</button>
+        </div>
       </div>
       <div class="board">
         {#each leaderboard as user, index}
@@ -754,6 +781,39 @@
     border-radius: 999px;
     background: #22c55e;
     box-shadow: 0 0 8px #22c55e;
+  }
+
+  .period-toggle {
+    display: flex;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 3px;
+  }
+
+  .period-toggle button {
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: none;
+    background: transparent;
+    color: #777;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.18s, color 0.18s;
+  }
+
+  .period-toggle button.active {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+  }
+
+  .period-label {
+    font-size: 11px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 1px;
   }
 
   .feed-item {

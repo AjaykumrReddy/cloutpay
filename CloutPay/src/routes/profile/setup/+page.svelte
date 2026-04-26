@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { get } from 'svelte/store';
   import { authStore, authToken, updateProfile } from '$lib/auth';
+  import { AuthError } from '$lib/api';
   import { toast } from '$lib/toast';
 
   let displayName = $state('');
@@ -22,6 +23,12 @@
       toast.success('Profile saved 🎉');
       goto('/');
     } catch (e: any) {
+      if (e instanceof AuthError) {
+        authStore.clear();
+        toast.error(e.message);
+        goto('/login');
+        return;
+      }
       toast.error(e.message);
     } finally {
       loading = false;

@@ -2,36 +2,33 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { get } from 'svelte/store';
-  import { authToken } from '$lib/auth';
-  import { getHistory, getMySummary } from '$lib/api';
+  import { authToken, authStore } from '$lib/auth';
+  import { getHistory, getMySummary, AuthError, type HistoryPayment } from '$lib/api';
   import { toast } from '$lib/toast';
-
-  interface Payment {
-    id: number;
-    amount: number;
-    user_name: string;
-    payment_reference: string;
-    created_at: string;
-  }
 
   interface MySummary {
     display_name: string | null;
     total_contributed: number;
     payments_count: number;
+    biggest_payment: number;
+    average_payment: number;
     current_rank: number | null;
     amount_to_next_rank: number | null;
     next_rank_name: string | null;
     last_payment_at: string | null;
   }
 
-  let payments = $state<Payment[]>([]);
+  let payments = $state<HistoryPayment[]>([]);
   let summary = $state<MySummary | null>(null);
   let loading = $state(true);
+  let loadingMore = $state(false);
   let error = $state('');
+  let page = $state(1);
+  let hasMore = $state(false);
 
-  const totalAmount = $derived(payments.reduce((sum, payment) => sum + payment.amount, 0));
-  const biggestPayment = $derived(payments.reduce((max, payment) => Math.max(max, payment.amount), 0));
-  const averagePayment = $derived(payments.length ? Math.round(totalAmount / payments.length) : 0);
+  const totalAmount = $derived(summary?.total_contributed ?? 0);
+  const biggestPayment = $derived(summary?.biggest_payment ?? 0);
+  const averagePayment = $derived(summary?.average_payment ?? 0);
 
   onMount(async () => {
     const token = get(authToken);
@@ -42,17 +39,47 @@
 
     try {
       const [history, mySummary] = await Promise.all([
-        getHistory(token),
+        getHistory(token, 1),
         getMySummary(token)
       ]);
-      payments = history;
+      payments = history.items;
+      hasMore = history.has_more;
       summary = mySummary;
     } catch (e: any) {
+      if (e instanceof AuthError) {
+        authStore.clear();
+        toast.error(e.message);
+        goto('/login');
+        return;
+      }
       error = e?.message || 'Failed to load your history';
     } finally {
       loading = false;
     }
   });
+
+  async function loadMore() {
+    const token = get(authToken);
+    if (!token) return;
+    loadingMore = true;
+    try {
+      const next = page + 1;
+      const result = await getHistory(token, next);
+      payments = [...payments, ...result.items];
+      hasMore = result.has_more;
+      page = next;
+    } catch (e: any) {
+      if (e instanceof AuthError) {
+        authStore.clear();
+        toast.error(e.message);
+        goto('/login');
+        return;
+      }
+      toast.error(e?.message || 'Failed to load more');
+    } finally {
+      loadingMore = false;
+    }
+  }
 
   function formatDate(iso: string) {
     return new Date(iso).toLocaleString('en-IN', {
@@ -144,6 +171,12 @@
             </div>
           {/each}
         </div>
+
+        {#if hasMore}
+          <button class="load-more" onclick={loadMore} disabled={loadingMore}>
+            {loadingMore ? 'Loading...' : 'Load more'}
+          </button>
+        {/if}
       {/if}
     {/if}
   </div>
@@ -328,6 +361,30 @@
     padding: 6px 10px;
     cursor: pointer;
     font-size: 12px;
+  }
+
+  .load-more {
+    display: block;
+    width: 100%;
+    margin-top: 16px;
+    padding: 13px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .load-more:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .load-more:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .ref {
