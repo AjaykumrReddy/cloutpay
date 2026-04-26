@@ -496,7 +496,7 @@
 
   .hero {
     position: relative;
-    padding: 200px 20px 72px;
+    padding: 150px 20px 72px;
     text-align: center;
   }
 
