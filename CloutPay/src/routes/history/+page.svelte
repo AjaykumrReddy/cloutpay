@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { get } from 'svelte/store';
-  import { authToken, authStore } from '$lib/auth';
+  import { authToken, authStore, shareToken } from '$lib/auth';
   import { getHistory, getMySummary, AuthError, type HistoryPayment } from '$lib/api';
   import { toast } from '$lib/toast';
 
@@ -99,6 +99,26 @@
       toast.error('Could not copy the payment reference');
     }
   }
+
+  async function shareRank() {
+    const rank = summary?.current_rank;
+    const total = summary?.total_contributed ?? 0;
+    const shareUrl = `${window.location.origin}/share/${$shareToken}`;
+    const text = rank
+      ? `I'm ranked #${rank} on CloutPay with Rs ${total.toLocaleString('en-IN')} contributed. Can you beat me?`
+      : `I just contributed Rs ${total.toLocaleString('en-IN')} on CloutPay. Join the board!`;
+
+    if (navigator.share) {
+      try { await navigator.share({ title: 'CloutPay', text, url: shareUrl }); } catch {}
+    } else {
+      try {
+        await navigator.clipboard.writeText(`${text} ${shareUrl}`);
+        toast.success('Copied to clipboard');
+      } catch {
+        toast.error('Could not copy');
+      }
+    }
+  }
 </script>
 
 <div class="page">
@@ -107,11 +127,12 @@
   <div class="container">
     <div class="header">
       <div>
-        <a href="/" class="back">Back to home</a>
         <h1>Your Contribution History</h1>
         <p class="sub">Track how much you have contributed, how often you show up, and where you stand right now.</p>
       </div>
-      <a href="/profile" class="profile-link">Edit profile</a>
+      {#if summary?.display_name && $shareToken}
+        <button class="share-rank-btn" onclick={shareRank}>Share rank</button>
+      {/if}
     </div>
 
     {#if loading}
@@ -207,7 +228,7 @@
   .container {
     max-width: 920px;
     margin: 0 auto;
-    padding: 60px 20px 50px;
+    padding: 100px 20px 50px;
     position: relative;
     z-index: 1;
     box-sizing: border-box;
@@ -216,16 +237,21 @@
   .header {
     display: flex;
     justify-content: space-between;
+    align-items: flex-end;
     gap: 16px;
-    align-items: flex-start;
     margin-bottom: 30px;
   }
 
-  .back,
-  .profile-link {
-    color: #969696;
-    text-decoration: none;
-    font-size: 14px;
+  .share-rank-btn {
+    padding: 9px 18px;
+    border-radius: 999px;
+    border: none;
+    background: linear-gradient(90deg, #ff4d4d, #ffcc00);
+    color: black;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
   }
 
   h1 {
@@ -407,7 +433,7 @@
 
   @media (max-width: 540px) {
     .container {
-      padding: 40px 16px;
+      padding: 90px 16px 40px;
     }
 
     .summary-grid {

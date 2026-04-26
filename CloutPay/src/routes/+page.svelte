@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { afterNavigate } from '$app/navigation';
   import { PUBLIC_WS_URL } from '$env/static/public';
   import { getLeaderboard, getMySummary, AuthError } from '$lib/api';
-  import { authToken, displayName, isLoggedIn, authStore } from '$lib/auth';
+  import { authToken, displayName, isLoggedIn, authStore, shareToken } from '$lib/auth';
   import { initiatePayment } from '$lib/razorpay';
   import { toast } from '$lib/toast';
 
@@ -37,6 +38,7 @@
   let userName = $state('');
   let anonymous = $state(false);
   let showSuccess = $state(false);
+  let showShareCard = $state(false);
   let totalRaised = $state(0);
   let loadingSummary = $state(false);
   let loadedSummaryToken = $state<string | null | undefined>(undefined);
@@ -73,26 +75,13 @@
     }
   }
 
-  $effect(() => {
-    // re-fetch when period changes
-    loadLeaderboard().catch(() => toast.error('Failed to load leaderboard'));
-    if ($isLoggedIn && $authToken) {
-      loadedSummaryToken = undefined;
-      loadMyStats();
-    }
-  });
-
-  $effect(() => {
-    if (!$isLoggedIn) {
-      mySummary = null;
-      loadedSummaryToken = null;
-      return;
-    }
-
-    if ($authToken && loadedSummaryToken !== $authToken && !loadingSummary) {
-      loadMyStats();
-    }
-  });
+  async function onPeriodChange(newPeriod: Period) {
+    period = newPeriod;
+    await Promise.all([
+      loadLeaderboard(),
+      $authToken ? loadMyStats() : Promise.resolve()
+    ]);
+  }
 
   async function handlePayment() {
     const name = anonymous ? 'Anonymous' : ($displayName || userName.trim() || 'Anonymous');
@@ -108,9 +97,6 @@
       if ($isLoggedIn) await loadMyStats();
       showSuccess = true;
       toast.success(`Rs ${amount} contributed successfully`);
-      setTimeout(() => {
-        showSuccess = false;
-      }, 2800);
     } catch (e: any) {
       if (e instanceof AuthError) {
         authStore.clear();
@@ -170,10 +156,52 @@
     return `You are now ranked #${mySummary.current_rank}.`;
   }
 
+  async function shareRank() {
+    const rank = mySummary?.current_rank;
+    const total = mySummary?.total_contributed ?? 0;
+    const shareUrl = `${window.location.origin}/share/${$shareToken}`;
+    const text = rank
+      ? `I'm ranked #${rank} on CloutPay with Rs ${total.toLocaleString('en-IN')} contributed. Can you beat me?`
+      : `I just contributed Rs ${total.toLocaleString('en-IN')} on CloutPay. Join the board!`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'CloutPay', text, url: shareUrl });
+      } catch {}
+    } else {
+      try {
+        await navigator.clipboard.writeText(`${text} ${shareUrl}`);
+        toast.success('Copied to clipboard');
+      } catch {
+        toast.error('Could not copy');
+      }
+    }
+  }
+
   onMount(() => {
     loadLeaderboard().catch(() => toast.error('Failed to load leaderboard'));
     const ws = connectWS();
     return () => ws.close();
+  });
+
+  $effect(() => {
+    // $authToken starts null on mount (auth hydrates from localStorage after mount)
+    // this fires once when it becomes available
+    if ($authToken && loadedSummaryToken !== $authToken && !loadingSummary) {
+      loadMyStats();
+    }
+    if (!$isLoggedIn) {
+      mySummary = null;
+      loadedSummaryToken = null;
+    }
+  });
+
+  afterNavigate(({ from }) => {
+    if (!from) return;
+    if (from.url.pathname.startsWith('/profile')) {
+      loadedSummaryToken = null; // force $effect to re-fetch with fresh data
+      loadLeaderboard().catch(() => {});
+    }
   });
 </script>
 
@@ -310,8 +338,8 @@
       <div class="section-header">
         <h2>Top Supporters</h2>
         <div class="period-toggle">
-          <button class:active={period === 'all'} onclick={() => period = 'all'}>All time</button>
-          <button class:active={period === 'month'} onclick={() => period = 'month'}>This month</button>
+          <button class:active={period === 'all'} onclick={() => onPeriodChange('all')}>All time</button>
+          <button class:active={period === 'month'} onclick={() => onPeriodChange('month')}>This month</button>
         </div>
       </div>
       <div class="board">
@@ -357,7 +385,7 @@
 </div>
 
 {#if showSuccess}
-  <div class="success-overlay">
+  <div class="success-overlay" role="dialog" aria-modal="true" tabindex="-1">
     <div class="success-burst">
       <div class="success-glow success-glow-a"></div>
       <div class="success-glow success-glow-b"></div>
@@ -367,6 +395,38 @@
       <p class="success-text">You are on the board.</p>
       <p class="success-amount">Rs {amount.toLocaleString('en-IN')} contributed</p>
       <p class="success-copy">{getSuccessMessage()}</p>
+      {#if $isLoggedIn && mySummary?.display_name}
+        <button class="share-btn" onclick={() => { showSuccess = false; showShareCard = true; }}>
+          Share your rank
+        </button>
+      {/if}
+      <button class="close-btn success-close" onclick={() => showSuccess = false}>Close</button>
+    </div>
+  </div>
+{/if}
+
+{#if showShareCard}
+  <div
+    class="success-overlay"
+    role="button"
+    tabindex="0"
+    aria-label="Close rank card"
+    onclick={() => showShareCard = false}
+    onkeydown={(e) => e.key === 'Escape' && (showShareCard = false)}
+  >
+    <div class="rank-card" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+      <div class="rank-card-glow-a"></div>
+      <div class="rank-card-glow-b"></div>
+      <p class="rank-card-brand">CloutPay</p>
+      <p class="rank-card-rank">
+        {mySummary?.current_rank ? `#${mySummary.current_rank}` : '🔥'}
+      </p>
+      <p class="rank-card-name">{mySummary?.display_name ?? $displayName}</p>
+      <p class="rank-card-total">Rs {(mySummary?.total_contributed ?? 0).toLocaleString('en-IN')} contributed</p>
+      <div class="rank-card-actions">
+        <button class="share-btn" onclick={shareRank}>Share</button>
+        <button class="close-btn" onclick={() => showShareCard = false}>Close</button>
+      </div>
     </div>
   </div>
 {/if}
@@ -944,6 +1004,129 @@
     color: #aaaaaa;
     line-height: 1.5;
     font-size: 14px;
+  }
+
+  .share-btn {
+    position: relative;
+    z-index: 1;
+    margin-top: 18px;
+    padding: 11px 0;
+    width: 100%;
+    border-radius: 999px;
+    border: none;
+    background: linear-gradient(90deg, #ff4d4d, #ffcc00);
+    color: black;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .rank-card {
+    position: relative;
+    text-align: center;
+    padding: 44px 36px 36px;
+    width: min(320px, calc(100vw - 40px));
+    border-radius: 28px;
+    background: linear-gradient(160deg, #1a1a1a, #0d0d0d);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+  }
+
+  .rank-card-glow-a {
+    position: absolute;
+    width: 200px;
+    height: 200px;
+    top: -60px;
+    left: -40px;
+    border-radius: 999px;
+    background: rgba(255, 77, 77, 0.22);
+    filter: blur(50px);
+    pointer-events: none;
+  }
+
+  .rank-card-glow-b {
+    position: absolute;
+    width: 180px;
+    height: 180px;
+    bottom: -40px;
+    right: -30px;
+    border-radius: 999px;
+    background: rgba(255, 204, 0, 0.18);
+    filter: blur(50px);
+    pointer-events: none;
+  }
+
+  .rank-card-brand {
+    position: relative;
+    z-index: 1;
+    margin: 0 0 20px;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    background: linear-gradient(90deg, #ff4d4d, #ffcc00);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .rank-card-rank {
+    position: relative;
+    z-index: 1;
+    margin: 0 0 8px;
+    font-size: 4rem;
+    font-weight: 900;
+    letter-spacing: -2px;
+    line-height: 1;
+    background: linear-gradient(180deg, #ffffff, #aaaaaa);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .rank-card-name {
+    position: relative;
+    z-index: 1;
+    margin: 0 0 6px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #f0f0f0;
+  }
+
+  .rank-card-total {
+    position: relative;
+    z-index: 1;
+    margin: 0 0 28px;
+    font-size: 14px;
+    color: #ffdf71;
+    font-weight: 600;
+  }
+
+  .rank-card-actions {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .close-btn {
+    padding: 11px 0;
+    width: 100%;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .success-close {
+    position: relative;
+    z-index: 1;
+    margin-top: 10px;
   }
 
   @media (max-width: 900px) {

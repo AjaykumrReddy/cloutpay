@@ -4,6 +4,7 @@
 	import { authStore, isLoggedIn } from '$lib/auth';
 	import { toast } from '$lib/toast';
 	import Toast from '$lib/Toast.svelte';
+	import { goto } from '$app/navigation';
 
 	let { children } = $props();
 	let mobileMenuOpen = $state(false);
@@ -12,6 +13,8 @@
 		authStore.clear();
 		mobileMenuOpen = false;
 		toast.info('Logged out');
+		// once logout redirect to home
+		goto('/');
 	}
 
 	function closeMenu() {

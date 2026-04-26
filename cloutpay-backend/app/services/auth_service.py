@@ -114,6 +114,10 @@ def verify_otp(phone: str, code: str, db: Session) -> dict:
     else:
         user.is_verified = True
         user.last_login = datetime.utcnow()
+        # Backfill share_token for existing users that don't have one
+        if not user.share_token:
+            from app.models.users import _generate_share_token
+            user.share_token = _generate_share_token()
 
     db.flush()
 
@@ -121,14 +125,31 @@ def verify_otp(phone: str, code: str, db: Session) -> dict:
         "token": _create_token(user.id, phone),
         "is_new_user": is_new_user,
         "display_name": user.display_name,
+        "share_token": user.share_token,
     }
 
 
 def update_profile(user_id: int, display_name: str, db: Session) -> str:
+    from app.models.payment import Payment, PaymentOrder
+
     user = db.query(User).filter_by(id=user_id).first()
     if not user:
         raise ValueError("User not found")
+
+    old_name = user.display_name
     user.display_name = display_name.strip()
+
+    # Update user_name on all past payments so leaderboard stays consistent
+    if old_name and old_name != user.display_name:
+        order_ids = [
+            r.id for r in db.query(PaymentOrder.id).filter_by(user_id=user_id, status="paid").all()
+        ]
+        if order_ids:
+            db.query(Payment).filter(
+                Payment.order_id.in_(order_ids),
+                Payment.user_name == old_name
+            ).update({"user_name": user.display_name}, synchronize_session=False)
+
     db.flush()
     return user.display_name
 

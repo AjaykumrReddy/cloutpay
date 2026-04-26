@@ -73,6 +73,8 @@
     justify-content: center;
     font-family: 'Inter', sans-serif;
     position: relative;
+    padding: 100px 20px 40px;
+    box-sizing: border-box;
   }
 
   .glow {

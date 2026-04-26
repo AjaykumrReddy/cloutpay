@@ -62,7 +62,7 @@ def get_history(
     page: int = Query(1, ge=1),
 ):
     try:
-        PAGE_SIZE = 2
+        PAGE_SIZE = 20
         offset = (page - 1) * PAGE_SIZE
 
         order_ids = [

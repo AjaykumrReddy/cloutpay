@@ -88,7 +88,7 @@
     position: relative;
     font-family: 'Inter', sans-serif;
     color: white;
-    padding: 20px;
+    padding: 100px 20px 40px;
     box-sizing: border-box;
     overflow-x: hidden;
   }

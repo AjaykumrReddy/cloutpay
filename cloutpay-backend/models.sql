@@ -13,6 +13,11 @@ CREATE INDEX IF NOT EXISTS idx_users_phone_number ON users (phone_number);
 CREATE INDEX IF NOT EXISTS idx_users_created_at ON users (created_at);
 CREATE INDEX IF NOT EXISTS idx_phone_created ON users (phone_number, created_at);
 
+-- Add share_token to existing tables (safe to run multiple times)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS share_token VARCHAR(16) UNIQUE;
+UPDATE users SET share_token = encode(gen_random_bytes(8), 'base64') WHERE share_token IS NULL;
+CREATE INDEX IF NOT EXISTS idx_users_share_token ON users (share_token);
+
 CREATE TABLE IF NOT EXISTS otps (
     id SERIAL PRIMARY KEY,
     phone_number VARCHAR(15) NOT NULL,

@@ -35,7 +35,7 @@
     loading = true;
     try {
       const result = await verifyOtp(phone.trim(), code.trim());
-      authStore.setAuth(result.token, result.display_name);
+      authStore.setAuth(result.token, result.display_name, result.share_token);
       if (result.is_new_user || !result.display_name) {
         goto('/profile/setup');
       } else {
@@ -101,7 +101,7 @@
     justify-content: center;
     font-family: 'Inter', sans-serif;
     position: relative;
-    padding: 20px;
+    padding: 100px 20px 40px;
     box-sizing: border-box;
     overflow-x: hidden;
   }

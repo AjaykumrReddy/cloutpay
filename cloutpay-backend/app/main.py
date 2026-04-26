@@ -9,7 +9,7 @@ from app.limiter import limiter
 from app.models import otp as otp_model  # noqa: F401
 from app.models import payment as payment_models  # noqa: F401
 from app.models import users  # noqa: F401
-from app.routes import auth, leaderboard, payment
+from app.routes import auth, leaderboard, payment, share
 from app.websocket import manager
 
 app = FastAPI()
@@ -36,6 +36,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(payment.router)
 app.include_router(leaderboard.router)
+app.include_router(share.router)
 
 
 @app.websocket("/ws")
