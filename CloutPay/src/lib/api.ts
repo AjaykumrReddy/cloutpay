@@ -1,6 +1,8 @@
 import { PUBLIC_API_BASE } from '$env/static/public';
 
-const API_BASE = import.meta.env.PUBLIC_API_BASE;
+const API_BASE = PUBLIC_API_BASE 
+
+console.log('API_BASE--',API_BASE);
 
 export class AuthError extends Error {
 	constructor() {
