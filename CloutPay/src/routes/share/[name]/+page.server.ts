@@ -2,7 +2,7 @@ import type { PageServerLoad } from './$types';
 import { env } from '$env/dynamic/private';
 
 export const load: PageServerLoad = async ({ params, fetch }) => {
-	const apiBase = env.API_BASE_INTERNAL || 'http://localhost:8000';
+	const apiBase = env.PUBLIC_API_BASE
 	const shareToken = params.name;
 
 	try {
