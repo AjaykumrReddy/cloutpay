@@ -54,3 +54,13 @@ CREATE TABLE IF NOT EXISTS payments (
 
 CREATE INDEX IF NOT EXISTS idx_payments_created_at ON payments (created_at);
 CREATE INDEX IF NOT EXISTS idx_payments_razorpay_payment_id ON payments (razorpay_payment_id);
+
+CREATE TABLE IF NOT EXISTS hall_of_fame (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) NOT NULL,
+    total_amount INTEGER NOT NULL,
+    month VARCHAR(7) UNIQUE NOT NULL,
+    recorded_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_hall_of_fame_month ON hall_of_fame (month);

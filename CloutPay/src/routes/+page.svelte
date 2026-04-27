@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { afterNavigate } from '$app/navigation';
   import { PUBLIC_WS_URL } from '$env/static/public';
-  import { getLeaderboard, getMySummary, AuthError } from '$lib/api';
+  import { getLeaderboard, getMySummary, AuthError, getHallOfFame, type HallOfFameEntry } from '$lib/api';
   import { authToken, displayName, isLoggedIn, authStore, shareToken } from '$lib/auth';
   import { initiatePayment } from '$lib/razorpay';
   import { toast } from '$lib/toast';
@@ -31,6 +31,7 @@
   let leaderboard = $state<LeaderboardEntry[]>([]);
   let activities = $state<ActivityItem[]>([]);
   let mySummary = $state<MySummary | null>(null);
+  let hallOfFame = $state<HallOfFameEntry[]>([]);
   let period = $state<Period>('all');
 
   let paying = $state(false);
@@ -180,6 +181,7 @@
 
   onMount(() => {
     loadLeaderboard().catch(() => toast.error('Failed to load leaderboard'));
+    getHallOfFame().then(d => hallOfFame = d).catch(() => {});
     const ws = connectWS();
     return () => ws.close();
   });
@@ -353,6 +355,24 @@
       {/if}
     </div>
   </section>
+
+  {#if hallOfFame.length > 0}
+    <section class="hof">
+      <div class="hof-header">
+        <p class="hof-title">🏆 Hall of Fame</p>
+        <p class="hof-sub">Monthly champions — the #1 ranked player each month</p>
+      </div>
+      <div class="hof-grid">
+        {#each hallOfFame as entry, i}
+          <div class="hof-card" class:hof-latest={i === 0}>
+            <span class="hof-month">{entry.month}</span>
+            <span class="hof-name">{entry.display_name}</span>
+            <span class="hof-amount">Rs {entry.total_amount.toLocaleString('en-IN')}</span>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
 
   <section class="how-it-works">
     <p class="hiw-label">How it works</p>
@@ -629,6 +649,79 @@
     font-weight: 800;
     font-size: 14px;
     text-decoration: none;
+  }
+
+  /* ── Hall of Fame ───────────────────────────── */
+  .hof {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 0 32px 64px;
+  }
+
+  .hof-header {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  .hof-title {
+    margin: 0 0 6px;
+    font-size: 1.3rem;
+    font-weight: 900;
+    color: white;
+    letter-spacing: -0.5px;
+  }
+
+  .hof-sub {
+    margin: 0;
+    font-size: 13px;
+    color: #555;
+  }
+
+  .hof-grid {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .hof-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 16px 20px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    min-width: 140px;
+    flex: 1;
+  }
+
+  .hof-card.hof-latest {
+    border-color: rgba(255, 204, 0, 0.25);
+    background: rgba(255, 204, 0, 0.05);
+  }
+
+  .hof-month {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #555;
+  }
+
+  .hof-card.hof-latest .hof-month {
+    color: #ffcc00;
+  }
+
+  .hof-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: #f0f0f0;
+  }
+
+  .hof-amount {
+    font-size: 13px;
+    font-weight: 600;
+    color: #ffdf71;
   }
 
   /* ── How it works ─────────────────────────────── */
@@ -1389,6 +1482,14 @@
 
     .hiw-step {
       padding: 18px 20px;
+    }
+
+    .hof {
+      padding: 0 16px 48px;
+    }
+
+    .hof-grid {
+      flex-direction: column;
     }
   }
 </style>

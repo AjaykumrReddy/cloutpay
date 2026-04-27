@@ -75,3 +75,31 @@ export async function verifyPayment(data: Record<string, string>, token?: string
 	if (!res.ok) throw new Error('Payment verification failed');
 	return res.json();
 }
+
+export interface Badge {
+	id: string;
+	emoji: string;
+	label: string;
+	desc: string;
+	earned: boolean;
+}
+
+export interface HallOfFameEntry {
+	display_name: string;
+	total_amount: number;
+	month: string;
+}
+
+export async function getMyBadges(token: string): Promise<Badge[]> {
+	const res = await apiFetch(`${API_BASE}/badges/me`, {
+		headers: authHeaders(token)
+	});
+	if (!res.ok) throw new Error('Failed to fetch badges');
+	return res.json();
+}
+
+export async function getHallOfFame(): Promise<HallOfFameEntry[]> {
+	const res = await apiFetch(`${API_BASE}/hall-of-fame`);
+	if (!res.ok) throw new Error('Failed to fetch hall of fame');
+	return res.json();
+}

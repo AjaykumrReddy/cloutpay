@@ -1,12 +1,22 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { get } from 'svelte/store';
   import { authStore, authToken, displayName, updateProfile } from '$lib/auth';
-  import { AuthError } from '$lib/api';
+  import { AuthError, getMyBadges, type Badge } from '$lib/api';
   import { toast } from '$lib/toast';
 
   let name = $state(get(displayName) ?? '');
   let loading = $state(false);
+  let badges = $state<Badge[]>([]);
+
+  onMount(async () => {
+    const token = get(authToken);
+    if (!token) return;
+    try {
+      badges = await getMyBadges(token);
+    } catch {}
+  });
 
   async function handleSave() {
     const trimmed = name.trim();
@@ -70,6 +80,20 @@
     />
 
     <p class="hint">This name is used on the leaderboard and in your payment history.</p>
+
+    {#if badges.length > 0}
+      <div class="badges-section">
+        <p class="badges-label">Your badges</p>
+        <div class="badges-grid">
+          {#each badges as badge}
+            <div class="badge-item" class:earned={badge.earned} title={badge.desc}>
+              <span class="badge-emoji">{badge.emoji}</span>
+              <span class="badge-name">{badge.label}</span>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
 
     <button class="btn primary" onclick={handleSave} disabled={loading}>
       {loading ? 'Saving...' : 'Save changes'}
@@ -197,6 +221,63 @@
   .btn:disabled {
     opacity: 0.55;
     cursor: not-allowed;
+  }
+
+  .badges-section {
+    margin-bottom: 20px;
+  }
+
+  .badges-label {
+    margin: 0 0 10px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #555;
+    font-weight: 700;
+  }
+
+  .badges-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .badge-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 12px 8px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+    opacity: 0.3;
+    filter: grayscale(1);
+    transition: opacity 0.2s, filter 0.2s;
+  }
+
+  .badge-item.earned {
+    opacity: 1;
+    filter: none;
+    border-color: rgba(255, 204, 0, 0.2);
+    background: rgba(255, 204, 0, 0.05);
+  }
+
+  .badge-emoji {
+    font-size: 1.5rem;
+    line-height: 1;
+  }
+
+  .badge-name {
+    font-size: 10px;
+    font-weight: 700;
+    color: #aaa;
+    text-align: center;
+    letter-spacing: 0.3px;
+  }
+
+  .badge-item.earned .badge-name {
+    color: #ffdf71;
   }
 
   @media (max-width: 540px) {
