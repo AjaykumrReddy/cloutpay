@@ -44,6 +44,77 @@
   let loadingSummary = $state(false);
   let loadedSummaryToken = $state<string | null | undefined>(undefined);
 
+  // ── Draggable hero words ───────────────────────
+  interface Word { label: string; x: number; y: number; vx: number; vy: number; rot: number; vrot: number; scale: number; dragging: boolean; homeX: number; homeY: number; homeRot: number; }
+  let wordsContainer: HTMLElement;
+  const initWords = (): Word[] => [
+    { label: 'Pay.', x: -220, y: 0, vx: 0, vy: 0, rot: -2, vrot: 0, scale: 1, dragging: false, homeX: -220, homeY: 0, homeRot: -2 },
+    { label: 'Rank.', x: 0,    y: 0, vx: 0, vy: 0, rot:  1, vrot: 0, scale: 1, dragging: false, homeX: 0, homeY: 0, homeRot: 1 },
+    { label: 'Flex.', x: 220,  y: 0, vx: 0, vy: 0, rot: -1, vrot: 0, scale: 1, dragging: false, homeX: 220, homeY: 0, homeRot: -1 },
+  ];
+  let words = $state<Word[]>(initWords());
+
+  let dragIdx = -1;
+  let dragOx = 0, dragOy = 0;
+  let lastMx = 0, lastMy = 0;
+  let dragVx = 0, dragVy = 0;
+
+  function startDrag(e: MouseEvent, i: number) {
+    e.preventDefault();
+    dragIdx = i;
+    dragOx = e.clientX - words[i].x;
+    dragOy = e.clientY - words[i].y;
+    lastMx = e.clientX; lastMy = e.clientY;
+    dragVx = 0; dragVy = 0;
+    words = words.map((w, idx) => idx === i ? { ...w, dragging: true, scale: 1.15 } : w);
+
+    function onMove(e: MouseEvent) {
+      dragVx = e.clientX - lastMx;
+      dragVy = e.clientY - lastMy;
+      lastMx = e.clientX; lastMy = e.clientY;
+      words = words.map((w, idx) => idx === dragIdx ? { ...w, x: e.clientX - dragOx, y: e.clientY - dragOy } : w);
+    }
+    function onUp() {
+      words = words.map((w, idx) => idx === dragIdx ? { ...w, dragging: false, vx: dragVx * 1.4, vy: dragVy * 1.4, vrot: dragVx * 0.8, scale: 1 } : w);
+      dragIdx = -1;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  function startDragTouch(e: TouchEvent, i: number) {
+    const t = e.touches[0];
+    dragIdx = i;
+    dragOx = t.clientX - words[i].x;
+    dragOy = t.clientY - words[i].y;
+    lastMx = t.clientX; lastMy = t.clientY;
+    dragVx = 0; dragVy = 0;
+    words = words.map((w, idx) => idx === i ? { ...w, dragging: true, scale: 1.15 } : w);
+
+    function onMove(e: TouchEvent) {
+      const t = e.touches[0];
+      dragVx = t.clientX - lastMx;
+      dragVy = t.clientY - lastMy;
+      lastMx = t.clientX; lastMy = t.clientY;
+      words = words.map((w, idx) => idx === dragIdx ? { ...w, x: t.clientX - dragOx, y: t.clientY - dragOy } : w);
+    }
+    function onUp() {
+      words = words.map((w, idx) => idx === dragIdx ? { ...w, dragging: false, vx: dragVx * 1.4, vy: dragVy * 1.4, vrot: dragVx * 0.8, scale: 1 } : w);
+      dragIdx = -1;
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    }
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('touchend', onUp);
+  }
+
+  function resetWord(i: number) {
+    const init = initWords()[i];
+    words = words.map((w, idx) => idx === i ? { ...init } : w);
+  }
+
   $effect(() => {
     totalRaised = leaderboard.reduce((sum, entry) => sum + entry.amount, 0);
   });
@@ -183,7 +254,41 @@
     loadLeaderboard().catch(() => toast.error('Failed to load leaderboard'));
     getHallOfFame().then(d => hallOfFame = d).catch(() => {});
     const ws = connectWS();
-    return () => ws.close();
+
+    // Physics loop
+    let raf: number;
+    function tick() {
+      words = words.map(w => {
+        if (w.dragging) return w;
+        const isAtHome = w.vx === 0 && w.vy === 0 && w.y === w.homeY && w.rot === w.homeRot && w.scale === 1;
+        if (isAtHome) return w;
+
+        let { x, y, vx, vy, rot, vrot, scale } = w;
+        vy += 0.55; // gravity
+        vx *= 0.98; // air friction
+        vy *= 0.98;
+        vrot *= 0.97;
+        x += vx;
+        y += vy;
+        rot += vrot;
+        scale += (1 - scale) * 0.12; // spring back to 1
+
+        // Bounce off container bounds
+        if (wordsContainer) {
+          const rect = wordsContainer.getBoundingClientRect();
+          const hw = rect.width / 2;
+          const hh = rect.height;
+          if (x > hw - 10)  { x = hw - 10;  vx *= -0.6; vrot = vx * 0.3; }
+          if (x < -hw + 10) { x = -hw + 10; vx *= -0.6; vrot = vx * 0.3; }
+          if (y > hh - 10)  { y = hh - 10;  vy *= -0.55; vx *= 0.85; scale = 0.82; }
+          if (y < -20)      { y = -20;       vy *= -0.4; }
+        }
+        return { ...w, x, y, vx, vy, rot, vrot, scale };
+      });
+      raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => { ws.close(); cancelAnimationFrame(raf); };
   });
 
   $effect(() => {
@@ -226,7 +331,23 @@
     <div class="glow glow-b"></div>
 
     <div class="badge">🔴 Live board · {activities.length} recent actions</div>
-    <h1>Pay. Rank.<br /><span class="gradient-text">Flex.</span></h1>
+
+    <div class="hero-words" bind:this={wordsContainer}>
+      {#each words as w, i}
+        <span
+          class="hero-word"
+          class:gradient-word={i === 2}
+          style="transform: translate({w.x}px, {w.y}px) rotate({w.rot}deg) scale({w.scale}); cursor: grab;"
+          onmousedown={(e) => startDrag(e, i)}
+          ontouchstart={(e) => startDragTouch(e, i)}
+          ondblclick={() => resetWord(i)}
+          role="button"
+          tabindex="0"
+          aria-label={w.label}
+        >{w.label}</span>
+      {/each}
+    </div>
+    <p class="drag-hint">grab & throw · double-click to reset</p>
     <p class="sub">The live leaderboard where your money talks. Top spot is open. Someone's about to take it.</p>
 
     {#if $isLoggedIn && $displayName}
@@ -518,6 +639,7 @@
     position: relative;
     padding: 150px 20px 72px;
     text-align: center;
+    isolation: isolate;
   }
 
   .glow {
@@ -787,18 +909,49 @@
     align-self: center;
   }
 
-  h1 {
-    font-size: clamp(2.9rem, 7vw, 5rem);
-    line-height: 1.05;
-    margin: 0 0 16px;
-    letter-spacing: -2px;
+
+  /* ── Draggable hero words ─────────────────────── */
+  .hero-words {
+    position: relative;
+    min-height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 18px;
+    user-select: none;
+    overflow: visible;
+    pointer-events: none;
+    z-index: 2;
   }
 
-  .gradient-text {
+  .hero-word {
+    position: absolute;
+    font-size: clamp(2.9rem, 7vw, 5rem);
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -2px;
+    color: white;
+    will-change: transform;
+    touch-action: none;
+    pointer-events: all;
+    z-index: 10;
+  }
+
+  .hero-word:active { cursor: grabbing; }
+
+  .gradient-word {
     background: linear-gradient(90deg, #ff4d4d, #ffcc00);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
+  }
+
+  .drag-hint {
+    font-size: 11px;
+    color: #444;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin: 0 0 20px;
   }
 
   .sub {
