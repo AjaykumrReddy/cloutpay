@@ -47,12 +47,20 @@
   // ── Draggable hero words ───────────────────────
   interface Word { label: string; x: number; y: number; vx: number; vy: number; rot: number; vrot: number; scale: number; dragging: boolean; homeX: number; homeY: number; homeRot: number; }
   let wordsContainer: HTMLElement;
-  const initWords = (): Word[] => [
-    { label: 'Pay.', x: -220, y: 0, vx: 0, vy: 0, rot: -2, vrot: 0, scale: 1, dragging: false, homeX: -220, homeY: 0, homeRot: -2 },
-    { label: 'Rank.', x: 0,    y: 0, vx: 0, vy: 0, rot:  1, vrot: 0, scale: 1, dragging: false, homeX: 0, homeY: 0, homeRot: 1 },
-    { label: 'Flex.', x: 220,  y: 0, vx: 0, vy: 0, rot: -1, vrot: 0, scale: 1, dragging: false, homeX: 220, homeY: 0, homeRot: -1 },
-  ];
-  let words = $state<Word[]>(initWords());
+
+  function makeWords(): Word[] {
+    const gap = typeof window !== 'undefined' ? Math.min(200, window.innerWidth * 0.26) : 200;
+    return [
+      { label: 'Pay.',  x: -gap, y: 0, vx: 0, vy: 0, rot: -2, vrot: 0, scale: 1, dragging: false, homeX: -gap, homeY: 0, homeRot: -2 },
+      { label: 'Rank.', x: 0,    y: 0, vx: 0, vy: 0, rot:  1, vrot: 0, scale: 1, dragging: false, homeX: 0,    homeY: 0, homeRot:  1 },
+      { label: 'Flex.', x:  gap, y: 0, vx: 0, vy: 0, rot: -1, vrot: 0, scale: 1, dragging: false, homeX:  gap, homeY: 0, homeRot: -1 },
+    ];
+  }
+  let words = $state<Word[]>([
+    { label: 'Pay.',  x: -200, y: 0, vx: 0, vy: 0, rot: -2, vrot: 0, scale: 1, dragging: false, homeX: -200, homeY: 0, homeRot: -2 },
+    { label: 'Rank.', x: 0,    y: 0, vx: 0, vy: 0, rot:  1, vrot: 0, scale: 1, dragging: false, homeX: 0,    homeY: 0, homeRot:  1 },
+    { label: 'Flex.', x:  200, y: 0, vx: 0, vy: 0, rot: -1, vrot: 0, scale: 1, dragging: false, homeX:  200, homeY: 0, homeRot: -1 },
+  ]);
 
   let dragIdx = -1;
   let dragOx = 0, dragOy = 0;
@@ -111,8 +119,8 @@
   }
 
   function resetWord(i: number) {
-    const init = initWords()[i];
-    words = words.map((w, idx) => idx === i ? { ...init } : w);
+    const w = makeWords()[i];
+    words = words.map((word, idx) => idx === i ? { ...w } : word);
   }
 
   $effect(() => {
@@ -251,9 +259,16 @@
   }
 
   onMount(() => {
+    // Set responsive positions now that window is available
+    words = makeWords();
+
     loadLeaderboard().catch(() => toast.error('Failed to load leaderboard'));
     getHallOfFame().then(d => hallOfFame = d).catch(() => {});
     const ws = connectWS();
+
+    // Recalculate home positions on resize
+    function onResize() { words = makeWords(); }
+    window.addEventListener('resize', onResize);
 
     // Physics loop
     let raf: number;
@@ -288,7 +303,7 @@
       raf = requestAnimationFrame(tick);
     }
     raf = requestAnimationFrame(tick);
-    return () => { ws.close(); cancelAnimationFrame(raf); };
+    return () => { ws.close(); cancelAnimationFrame(raf); window.removeEventListener('resize', onResize); };
   });
 
   $effect(() => {
@@ -1596,6 +1611,14 @@
   @media (max-width: 600px) {
     .hero {
       padding: 170px 16px 56px;
+    }
+
+    .hero-words {
+      min-height: 80px;
+    }
+
+    .hero-word {
+      font-size: clamp(1.8rem, 8vw, 2.6rem);
     }
 
     .form-card,
