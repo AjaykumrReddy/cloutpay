@@ -99,6 +99,20 @@
 
 	{@render children()}
 	<Toast />
+
+	<footer class="footer">
+		<div class="footer-inner">
+			<span class="footer-brand">CloutPay</span>
+			<nav class="footer-links">
+				<a href="/about">About</a>
+				<a href="/terms">Terms</a>
+				<a href="/privacy">Privacy</a>
+				<a href="/refund">Refund Policy</a>
+				<a href="/contact">Contact</a>
+			</nav>
+			<p class="footer-copy">© 2025 CloutPay. All rights reserved. CloutPay is a paid leaderboard listing service. Not a lottery, gambling, or donation platform.</p>
+		</div>
+	</footer>
 </div>
 
 <style>
@@ -347,7 +361,7 @@
 		}
 
 		.logo {
-			font-size: 1.12rem;
+		font-size: 1.12rem;
 		}
 	}
 
@@ -359,5 +373,54 @@
 		.mobile-link {
 			padding: 13px 14px;
 		}
+	}
+
+	.footer {
+		border-top: 1px solid rgba(255,255,255,0.06);
+		padding: 32px 20px;
+		background: #080808;
+	}
+
+	.footer-inner {
+		max-width: 1120px;
+		margin: 0 auto;
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+		align-items: center;
+		text-align: center;
+	}
+
+	.footer-brand {
+		font-size: 1rem;
+		font-weight: 900;
+		background: linear-gradient(90deg, #ff4d4d, #ffcc00);
+		-webkit-background-clip: text;
+		background-clip: text;
+		-webkit-text-fill-color: transparent;
+	}
+
+	.footer-links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px 20px;
+		justify-content: center;
+	}
+
+	.footer-links a {
+		color: #555;
+		text-decoration: none;
+		font-size: 13px;
+		transition: color 0.2s;
+	}
+
+	.footer-links a:hover { color: #aaa; }
+
+	.footer-copy {
+		color: #333;
+		font-size: 11px;
+		line-height: 1.6;
+		max-width: 560px;
+		margin: 0;
 	}
 </style>
