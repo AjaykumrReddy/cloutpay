@@ -27,7 +27,6 @@ pydantic==2.13.2
 pydantic_core==2.46.2
 python-dotenv==1.2.2
 python-jose==3.5.0
-razorpay==2.0.1
 requests==2.33.1
 rsa==4.9.1
 six==1.17.0

@@ -33,7 +33,7 @@ export async function createOrder(amount: number, token?: string | null) {
 		body: JSON.stringify({ amount })
 	});
 	if (!res.ok) throw new Error('Failed to create order');
-	return res.json();
+	return res.json() as Promise<{ cf_order_id: string; payment_session_id: string; amount: number }>;
 }
 
 export async function getLeaderboard(period?: 'month') {
@@ -70,7 +70,11 @@ export async function verifyPayment(data: Record<string, string>, token?: string
 	const res = await apiFetch(`${API_BASE}/payments/verify-payment`, {
 		method: 'POST',
 		headers: authHeaders(token),
-		body: JSON.stringify(data)
+		body: JSON.stringify({
+			cf_order_id: data.cf_order_id,
+			user_name: data.user_name || null,
+			anonymous: data.anonymous === 'true',
+		})
 	});
 	if (!res.ok) throw new Error('Payment verification failed');
 	return res.json();

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey,Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 from datetime import datetime
 from app.db import Base
 
@@ -9,11 +9,11 @@ class PaymentOrder(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
-    razorpay_order_id = Column(String, unique=True, index=True)
+    cf_order_id = Column(String, unique=True, index=True)       # Cashfree order_id
+    payment_session_id = Column(String, nullable=True)          # Cashfree payment_session_id
     amount = Column(Integer)
     currency = Column(String, default="INR")
-
-    status = Column(String, default="created")  # created, paid, failed
+    status = Column(String, default="created")                  # created, paid, failed
 
     created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
@@ -25,9 +25,10 @@ class Payment(Base):
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("payment_orders.id"))
 
-    razorpay_payment_id = Column(String, unique=True, index=True)
+    cf_payment_id = Column(String, unique=True, index=True)     # Cashfree payment_id
+    payment_reference = Column(String, nullable=True)           # shown to user
     amount = Column(Integer)
-
     user_name = Column(String)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)

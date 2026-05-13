@@ -1,90 +1,102 @@
-import hashlib
-import hmac
-import os
-
+import uuid
 from sqlalchemy.orm import Session
 
 from app.models.payment import Payment, PaymentOrder
 from app.models.users import User
-from app.services.razorpay_service import client
+from app.services.cashfree_service import create_cashfree_order, get_cashfree_order
 
 
 class PaymentService:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_order(self, user_id: int | None, amount: int):
-        if not isinstance(amount, int):
-            raise ValueError("Amount must be an integer")
-        if amount < 10:
-            raise ValueError("Minimum amount is Rs 10")
+    def create_order(self, user_id: int | None, amount: int, customer_phone: str = "9999999999"):
+        if amount < 1:
+            raise ValueError("Minimum amount is Rs 1")
 
-        razorpay_order = client.order.create({
-            "amount": amount * 100,
-            "currency": "INR"
-        })
+        # Generate a unique order_id for Cashfree
+        cf_order_id = f"cloutpay_{uuid.uuid4().hex[:16]}"
+
+        # Get customer details if logged in
+        customer_name = "CloutPay User"
+        if user_id:
+            user = self.db.query(User).filter_by(id=user_id).first()
+            if user:
+                customer_phone = user.phone_number or customer_phone
+                customer_name = user.display_name or customer_name
+
+        cf_response = create_cashfree_order(
+            order_id=cf_order_id,
+            amount=float(amount),
+            customer_id=str(user_id or f"guest_{uuid.uuid4().hex[:8]}"),
+            customer_phone=customer_phone,
+            customer_name=customer_name,
+        )
+        print(f"cf_response: {cf_response}")
+
+        payment_session_id = cf_response.get("payment_session_id")
 
         order = PaymentOrder(
             user_id=user_id,
-            razorpay_order_id=razorpay_order["id"],
+            cf_order_id=cf_order_id,
+            payment_session_id=payment_session_id,
             amount=amount,
-            status="created"
+            status="created",
         )
-
         self.db.add(order)
         self.db.flush()
 
         return {
-            "order_id": razorpay_order["id"],
-            "amount": amount * 100,
-            "currency": "INR"
+            "cf_order_id": cf_order_id,
+            "payment_session_id": payment_session_id,
+            "amount": amount,
         }
 
-    def verify_payment(self, data: dict, user_id: int | None = None) -> tuple[Payment, bool]:
-        order_id = data["razorpay_order_id"]
-        payment_id = data["razorpay_payment_id"]
-        signature = data["razorpay_signature"]
-        is_anonymous = data.get("anonymous") in (True, "true", "True", "1")
+    def verify_payment(self, cf_order_id: str, user_id: int | None, user_name_override: str | None = None, anonymous: bool = False) -> tuple[Payment, bool]:
+        # Fetch order status from Cashfree
+        cf_order = get_cashfree_order(cf_order_id)
+        order_status = cf_order.get("order_status", "")
 
-        body = f"{order_id}|{payment_id}"
-        expected = hmac.new(
-            os.getenv("RAZORPAY_KEY_SECRET", "").encode("utf-8"),
-            body.encode("utf-8"),
-            hashlib.sha256
-        ).hexdigest()
+        if order_status != "PAID":
+            raise ValueError(f"Payment not completed. Status: {order_status}")
 
-        if expected != signature:
-            raise ValueError("Invalid payment signature")
-
-        order = self.db.query(PaymentOrder).filter_by(
-            razorpay_order_id=order_id
-        ).first()
-
+        # Get our local order record
+        order = self.db.query(PaymentOrder).filter_by(cf_order_id=cf_order_id).first()
         if not order:
             raise ValueError("Order not found")
 
+        # Prevent duplicate processing
         if order.status == "paid":
             existing = self.db.query(Payment).filter_by(order_id=order.id).first()
             if existing:
                 return existing, False
 
-        if is_anonymous:
+        # Get cf_payment_id from payments list
+        payments_data = cf_order.get("payments", [])
+        cf_payment_id = None
+        if isinstance(payments_data, list) and payments_data:
+            cf_payment_id = str(payments_data[0].get("cf_payment_id", ""))
+        if not cf_payment_id:
+            cf_payment_id = f"cf_{cf_order_id}"
+
+        # Resolve user name
+        if anonymous:
             user_name = "Anonymous"
         elif user_id:
             user = self.db.query(User).filter_by(id=user_id).first()
             user_name = (user.display_name or user.phone_number) if user else "Anonymous"
         else:
-            user_name = data.get("user_name") or "Anonymous"
+            user_name = user_name_override or "Anonymous"
 
         order.status = "paid"
 
         payment = Payment(
             order_id=order.id,
-            razorpay_payment_id=payment_id,
+            cf_payment_id=cf_payment_id,
+            payment_reference=cf_payment_id,
             amount=order.amount,
-            user_name=user_name
+            user_name=user_name,
         )
-
         self.db.add(payment)
         self.db.flush()
 

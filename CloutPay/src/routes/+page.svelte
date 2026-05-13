@@ -4,7 +4,7 @@
   import { PUBLIC_WS_URL } from '$env/static/public';
   import { getLeaderboard, getMySummary, AuthError, getHallOfFame, type HallOfFameEntry } from '$lib/api';
   import { authToken, displayName, isLoggedIn, authStore, shareToken } from '$lib/auth';
-  import { initiatePayment } from '$lib/razorpay';
+  import { initiatePayment } from '$lib/cashfree';
   import { toast } from '$lib/toast';
 
   type Period = 'all' | 'month';
@@ -165,7 +165,7 @@
 
   async function handlePayment() {
     const name = anonymous ? 'Anonymous' : ($displayName || userName.trim() || 'Anonymous');
-    if (amount < 10) {
+    if (amount < 1) {
       toast.error('Minimum amount is Rs 10');
       return;
     }
@@ -176,7 +176,7 @@
       await loadLeaderboard();
       if ($isLoggedIn) await loadMyStats();
       showSuccess = true;
-      toast.success(`Rs ${amount} contributed successfully`);
+      toast.success(`Rs ${amount} paid successfully`);
     } catch (e: any) {
       if (e instanceof AuthError) {
         authStore.clear();
@@ -363,7 +363,7 @@
       {/each}
     </div>
     <p class="drag-hint">grab & throw · double-click to reset</p>
-    <p class="sub">The live leaderboard where your money talks. Top spot is open. Someone's about to take it.</p>
+    <p class="sub">The live leaderboard where your participation fee earns you a public rank. Pay your fee, claim your spot, flex your position.</p>
 
     {#if $isLoggedIn && $displayName}
       <p class="welcome">Welcome back, <span class="name-highlight">{$displayName}</span></p>
@@ -417,7 +417,7 @@
         <div class="stats-bar">
           <div class="stat">
             <span class="stat-value">Rs {totalRaised.toLocaleString('en-IN')}</span>
-            <span class="stat-label">Total raised</span>
+            <span class="stat-label">Total paid in</span>
           </div>
           <div class="stat-divider"></div>
           <div class="stat">
@@ -448,7 +448,7 @@
                 <strong>{mySummary.current_rank ? `#${mySummary.current_rank}` : 'Unranked'}</strong>
               </div>
               <div class="personal-stat">
-                <span class="personal-label">Your total</span>
+                <span class="personal-label">Your total paid</span>
                 <strong>Rs {mySummary.total_contributed.toLocaleString('en-IN')}</strong>
               </div>
               <div class="personal-stat">
@@ -467,12 +467,12 @@
               </p>
             {:else if mySummary.current_rank && mySummary.amount_to_next_rank && mySummary.next_rank_name}
               <p class="personal-copy">
-                You need Rs {mySummary.amount_to_next_rank.toLocaleString('en-IN')} more to pass {mySummary.next_rank_name}.
+                Pay Rs {mySummary.amount_to_next_rank.toLocaleString('en-IN')} more to move ahead of {mySummary.next_rank_name}.
               </p>
             {:else if mySummary.current_rank === 1}
               <p class="personal-copy">You are currently leading the board.</p>
             {:else}
-              <p class="personal-copy">Make a contribution to start climbing the board.</p>
+              <p class="personal-copy">Pay a participation fee to start climbing the board.</p>
             {/if}
           {:else}
             <p class="personal-copy">
@@ -515,14 +515,14 @@
     <div class="hiw-steps">
       <div class="hiw-step">
         <span class="hiw-num">01</span>
-        <strong>Pay</strong>
-        <p>Contribute any amount — Rs 10 or Rs 10,000. Every rupee counts toward your rank.</p>
+        <strong>Pay a fee</strong>
+        <p>Pay a participation fee — Rs 10 or Rs 10,000. Every rupee counts toward your rank.</p>
       </div>
       <div class="hiw-divider"></div>
       <div class="hiw-step">
         <span class="hiw-num">02</span>
-        <strong>Rank</strong>
-        <p>Your total contribution places you on the live leaderboard, updated in real time.</p>
+        <strong>Get ranked</strong>
+        <p>Your name is listed on the live leaderboard, ranked by total participation amount.</p>
       </div>
       <div class="hiw-divider"></div>
       <div class="hiw-step">
@@ -536,7 +536,7 @@
   <div class="content">
     <section class="leaderboard">
       <div class="section-header">
-        <h2>Top Supporters</h2>
+        <h2>Top Participants</h2>
         <div class="period-toggle">
           <button class:active={period === 'all'} onclick={() => onPeriodChange('all')}>All time</button>
           <button class:active={period === 'month'} onclick={() => onPeriodChange('month')}>This month</button>
