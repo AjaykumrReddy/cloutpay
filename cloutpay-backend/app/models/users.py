@@ -25,6 +25,10 @@ class User(Base):
     longest_streak = Column(Integer, default=0, nullable=False)
     last_payment_date = Column(Date, nullable=True)
 
+    # Location
+    city = Column(String, nullable=True)
+    state = Column(String, nullable=True)
+
     # Auth flags
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)

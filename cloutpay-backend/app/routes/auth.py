@@ -39,6 +39,8 @@ class VerifyOTPRequest(BaseModel):
 
 class UpdateProfileRequest(BaseModel):
     display_name: str
+    city: Optional[str] = None
+    state: Optional[str] = None
 
     @field_validator("display_name")
     @classmethod
@@ -85,7 +87,22 @@ def update_profile(
     user_id: int = Depends(get_current_user_id),
 ):
     try:
-        display_name = auth_service.update_profile(user_id, body.display_name, db)
-        return {"display_name": display_name}
+        result = auth_service.update_profile(
+            user_id, body.display_name, db,
+            city=body.city, state=body.state
+        )
+        return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/my-location")
+def get_my_location(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    from app.models.users import User
+    user = db.query(User).filter_by(id=user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"city": user.city, "state": user.state}

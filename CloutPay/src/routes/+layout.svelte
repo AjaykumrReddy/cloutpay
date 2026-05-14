@@ -126,9 +126,13 @@
 		overflow-x: clip;
 	}
 
+	:global(.app-shell:has(.ticker-wrap)) .nav {
+		top: calc(33px + 12px);
+	}
+
 	.nav {
 		position: fixed;
-		top: calc(33px + 1px);
+		top: 12px;
 		left: 50%;
 		transform: translateX(-50%);
 		z-index: 100;
@@ -255,7 +259,7 @@
 
 	@media (max-width: 900px) {
 		.nav {
-			top: calc(33px + 14px);
+			top: 12px;
 			width: min(1120px, calc(100vw - 20px));
 			padding: 10px 12px 10px 16px;
 			border-radius: 20px;
@@ -264,7 +268,7 @@
 
 	@media (max-width: 820px) {
 		.nav {
-			top: calc(33px + 10px);
+			top: 10px;
 			width: calc(100vw - 16px);
 			padding: 10px 12px;
 			border-radius: 18px;

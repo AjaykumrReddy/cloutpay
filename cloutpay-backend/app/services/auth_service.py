@@ -129,7 +129,7 @@ def verify_otp(phone: str, code: str, db: Session) -> dict:
     }
 
 
-def update_profile(user_id: int, display_name: str, db: Session) -> str:
+def update_profile(user_id: int, display_name: str, db: Session, city: str | None = None, state: str | None = None) -> dict:
     from app.models.payment import Payment, PaymentOrder
 
     user = db.query(User).filter_by(id=user_id).first()
@@ -138,6 +138,11 @@ def update_profile(user_id: int, display_name: str, db: Session) -> str:
 
     old_name = user.display_name
     user.display_name = display_name.strip()
+
+    if city is not None:
+        user.city = city.strip() or None
+    if state is not None:
+        user.state = state.strip() or None
 
     # Update user_name on all past payments so leaderboard stays consistent
     if old_name and old_name != user.display_name:
@@ -151,7 +156,11 @@ def update_profile(user_id: int, display_name: str, db: Session) -> str:
             ).update({"user_name": user.display_name}, synchronize_session=False)
 
     db.flush()
-    return user.display_name
+    return {
+        "display_name": user.display_name,
+        "city": user.city,
+        "state": user.state,
+    }
 
 
 def _create_token(user_id: int, phone: str) -> str:

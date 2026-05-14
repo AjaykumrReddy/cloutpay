@@ -107,3 +107,9 @@ export async function getHallOfFame(): Promise<HallOfFameEntry[]> {
 	if (!res.ok) throw new Error('Failed to fetch hall of fame');
 	return res.json();
 }
+
+export async function getMyLocation(token: string): Promise<{ city: string | null; state: string | null }> {
+	const res = await apiFetch(`${API_BASE}/auth/my-location`, { headers: authHeaders(token) });
+	if (!res.ok) throw new Error('Failed to fetch location');
+	return res.json();
+}

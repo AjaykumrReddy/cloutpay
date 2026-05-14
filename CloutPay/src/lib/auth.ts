@@ -6,22 +6,22 @@ interface AuthState {
 	token: string;
 	display_name: string | null;
 	share_token: string | null;
+	city: string | null;
+	state: string | null;
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 function createAuthStore() {
-	// Start as null — will be hydrated on client via init() called from layout onMount
 	const { subscribe, set, update } = writable<AuthState | null>(null);
 
 	return {
 		subscribe,
-		// Called once in +layout.svelte onMount — safe to access localStorage here
 		init() {
 			const raw = localStorage.getItem('cp_auth');
 			if (raw) set(JSON.parse(raw));
 		},
 		setAuth(token: string, display_name: string | null, share_token: string | null) {
-			const state = { token, display_name, share_token };
+			const state = { token, display_name, share_token, city: null, state: null };
 			localStorage.setItem('cp_auth', JSON.stringify(state));
 			set(state);
 		},
@@ -29,6 +29,14 @@ function createAuthStore() {
 			update((s) => {
 				if (!s) return s;
 				const next = { ...s, display_name };
+				localStorage.setItem('cp_auth', JSON.stringify(next));
+				return next;
+			});
+		},
+		setLocation(city: string | null, state: string | null) {
+			update((s) => {
+				if (!s) return s;
+				const next = { ...s, city, state };
 				localStorage.setItem('cp_auth', JSON.stringify(next));
 				return next;
 			});
@@ -75,19 +83,23 @@ export async function verifyOtp(
 	return res.json();
 }
 
-export async function updateProfile(token: string, display_name: string): Promise<string> {
+export async function updateProfile(
+	token: string,
+	display_name: string,
+	city?: string | null,
+	state?: string | null
+): Promise<{ display_name: string; city: string | null; state: string | null }> {
 	const res = await fetch(`${PUBLIC_API_BASE}/auth/update-profile`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
 			Authorization: `Bearer ${token}`
 		},
-		body: JSON.stringify({ display_name })
+		body: JSON.stringify({ display_name, city: city || null, state: state || null })
 	});
 	if (!res.ok) {
 		const err = await res.json();
 		throw new Error(err.detail ?? 'Failed to update profile');
 	}
-	const data = await res.json();
-	return data.display_name;
+	return res.json();
 }

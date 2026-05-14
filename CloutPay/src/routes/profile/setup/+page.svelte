@@ -3,9 +3,12 @@
   import { get } from 'svelte/store';
   import { authStore, authToken, updateProfile } from '$lib/auth';
   import { AuthError } from '$lib/api';
+  import LocationPicker from '$lib/LocationPicker.svelte';
   import { toast } from '$lib/toast';
 
   let displayName = $state('');
+  let city = $state('');
+  let region = $state('');
   let loading = $state(false);
 
   async function handleSave() {
@@ -18,9 +21,10 @@
 
     loading = true;
     try {
-      const saved = await updateProfile(token, name);
-      authStore.setDisplayName(saved);
-      toast.success('Profile saved 🎉');
+      const result = await updateProfile(token, name, city || null, region || null);
+      authStore.setDisplayName(result.display_name);
+      authStore.setLocation(result.city, result.state);
+      toast.success('Welcome to CloutPay 🔥');
       goto('/');
     } catch (e: any) {
       if (e instanceof AuthError) {
@@ -41,10 +45,12 @@
 
   <div class="card">
     <h1>CloutPay</h1>
-    <p class="sub">What should we call you? 👤</p>
-    <p class="hint">This name will appear on the leaderboard</p>
+    <p class="sub">Set up your profile 👤</p>
+    <p class="hint">Your name appears on the leaderboard. You can change everything later.</p>
 
+    <label class="label" for="dname">Display name <span class="req">*</span></label>
     <input
+      id="dname"
       type="text"
       class="name-input"
       placeholder="Your display name"
@@ -54,12 +60,16 @@
       onkeydown={(e) => e.key === 'Enter' && handleSave()}
     />
 
-    <button class="btn" onclick={handleSave} disabled={loading}>
-      {loading ? 'Saving...' : 'Save & Continue 🚀'}
-    </button>
+    <div class="location-section">
+      <p class="location-label" id="city-label">Your city <span class="optional">optional</span></p>
+      <p class="location-hint">Unlock local leaderboards after your first payment.</p>
+      <div role="group" aria-labelledby="city-label">
+        <LocationPicker bind:city bind:region disabled={loading} />
+      </div>
+    </div>
 
-    <button class="skip" onclick={() => goto('/')} disabled={loading}>
-      Skip for now
+    <button class="btn" onclick={handleSave} disabled={loading || displayName.trim().length < 2}>
+      {loading ? 'Saving...' : 'Save & Continue 🚀'}
     </button>
   </div>
 </div>
@@ -94,8 +104,8 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 20px;
     padding: 40px 36px;
-    width: 360px;
-    text-align: center;
+    width: min(380px, 100%);
+    box-sizing: border-box;
     color: white;
     position: relative;
     z-index: 1;
@@ -108,20 +118,14 @@
     background-clip: text;
     -webkit-text-fill-color: transparent;
     margin: 0 0 6px;
+    text-align: center;
   }
 
-  .sub {
-    color: white;
-    font-size: 18px;
-    font-weight: 600;
-    margin-bottom: 6px;
-  }
+  .sub { color: white; font-size: 17px; font-weight: 600; margin-bottom: 4px; text-align: center; }
+  .hint { color: #666; font-size: 12px; margin-bottom: 24px; text-align: center; line-height: 1.5; }
 
-  .hint {
-    color: #888;
-    font-size: 13px;
-    margin-bottom: 24px;
-  }
+  .label { display: block; font-size: 12px; font-weight: 700; color: #c7c7c7; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .req { color: #ff4d4d; }
 
   .name-input {
     width: 100%;
@@ -131,15 +135,41 @@
     border-radius: 12px;
     color: white;
     font-size: 16px;
-    text-align: center;
     padding: 13px;
     outline: none;
-    margin-bottom: 14px;
+    margin-bottom: 20px;
     transition: border-color 0.2s;
   }
 
   .name-input:focus { border-color: #ff4d4d; }
   .name-input::placeholder { color: #555; }
+
+  .location-section { margin-bottom: 24px; }
+
+  .location-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #c7c7c7;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .optional {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.07);
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+
+  .location-hint { font-size: 12px; color: #555; margin: 0 0 10px; }
 
   .btn {
     width: 100%;
@@ -154,20 +184,9 @@
     transition: opacity 0.2s;
   }
 
-  .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-  .skip {
-    display: block;
-    width: 100%;
-    margin-top: 12px;
-    padding: 10px;
-    background: none;
-    border: none;
-    color: #555;
-    font-size: 13px;
-    cursor: pointer;
-    transition: color 0.2s;
+  @media (max-width: 540px) {
+    .card { padding: 28px 20px; }
   }
-
-  .skip:hover { color: #888; }
 </style>
