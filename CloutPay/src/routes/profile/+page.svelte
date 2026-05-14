@@ -45,7 +45,9 @@
 
   $effect(() => {
     const token = $authToken;
-    if (token && !dataLoaded) loadData(token);
+    if (token === undefined) return; // not yet hydrated
+    if (!token && !dataLoaded) goto('/login');
+    else if (token && !dataLoaded) loadData(token);
   });
 
   async function handleSave() {
@@ -212,7 +214,7 @@
     font-family: 'Inter', sans-serif;
     position: relative;
     overflow-x: hidden;
-    padding: 100px 24px 60px;
+    padding: 120px 24px 60px;
     box-sizing: border-box;
   }
 

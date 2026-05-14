@@ -12,13 +12,15 @@ interface AuthState {
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 function createAuthStore() {
-	const { subscribe, set, update } = writable<AuthState | null>(null);
+	// undefined = not yet hydrated, null = logged out
+	const { subscribe, set, update } = writable<AuthState | null | undefined>(undefined);
 
 	return {
 		subscribe,
 		init() {
 			const raw = localStorage.getItem('cp_auth');
 			if (raw) set(JSON.parse(raw));
+			else set(null); // explicitly mark as logged out after checking
 		},
 		setAuth(token: string, display_name: string | null, share_token: string | null) {
 			const state = { token, display_name, share_token, city: null, state: null };
@@ -51,7 +53,7 @@ function createAuthStore() {
 export const authStore = createAuthStore();
 export const isLoggedIn = derived(authStore, ($s) => !!$s?.token);
 export const displayName = derived(authStore, ($s) => $s?.display_name ?? null);
-export const authToken = derived(authStore, ($s) => $s?.token ?? null);
+export const authToken = derived(authStore, ($s) => $s === undefined ? undefined : ($s?.token ?? null));
 export const shareToken = derived(authStore, ($s) => $s?.share_token ?? null);
 
 // ── API calls ─────────────────────────────────────────────────────────────────

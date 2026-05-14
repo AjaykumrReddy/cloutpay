@@ -145,15 +145,16 @@ def update_profile(user_id: int, display_name: str, db: Session, city: str | Non
         user.state = state.strip() or None
 
     # Update user_name on all past payments so leaderboard stays consistent
-    if old_name and old_name != user.display_name:
-        order_ids = [
-            r.id for r in db.query(PaymentOrder.id).filter_by(user_id=user_id, status="paid").all()
-        ]
-        if order_ids:
-            db.query(Payment).filter(
-                Payment.order_id.in_(order_ids),
-                Payment.user_name == old_name
-            ).update({"user_name": user.display_name}, synchronize_session=False)
+    # This covers: name changes AND new users who paid anonymously then set their name
+    order_ids = [
+        r.id for r in db.query(PaymentOrder.id).filter_by(user_id=user_id, status="paid").all()
+    ]
+    if order_ids:
+        # Update payments that still have old name OR are still Anonymous/Someone
+        db.query(Payment).filter(
+            Payment.order_id.in_(order_ids),
+            Payment.user_name.in_([old_name, "Anonymous", "Someone"] if old_name else ["Anonymous", "Someone"])
+        ).update({"user_name": user.display_name}, synchronize_session=False)
 
     db.flush()
     return {

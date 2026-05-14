@@ -9,11 +9,12 @@ class PaymentOrder(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
-    cf_order_id = Column(String, unique=True, index=True)       # Cashfree order_id
-    payment_session_id = Column(String, nullable=True)          # Cashfree payment_session_id
+    cf_order_id = Column(String, unique=True, index=True)
+    payment_session_id = Column(String, nullable=True)
+    guest_session_id = Column(String, nullable=True, index=True)  # ties anonymous payments to a browser session
     amount = Column(Integer)
     currency = Column(String, default="INR")
-    status = Column(String, default="created")                  # created, paid, failed
+    status = Column(String, default="created")
 
     created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)

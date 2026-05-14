@@ -15,6 +15,7 @@
 
   interface ActivityItem {
     text: string;
+    masked_text?: string;
   }
 
   interface MySummary {
@@ -27,6 +28,7 @@
     last_payment_at: string | null;
     current_streak: number;
     longest_streak: number;
+    is_paid_user: boolean;
   }
 
   let leaderboard = $state<LeaderboardEntry[]>([]);
@@ -34,15 +36,27 @@
   let mySummary = $state<MySummary | null>(null);
   let hallOfFame = $state<HallOfFameEntry[]>([]);
   let period = $state<Period>('all');
+  let isPaidUser = $state(false);
 
   let paying = $state(false);
   let amount = $state(100);
   let userName = $state('');
   let showSuccess = $state(false);
+  let showLoginNudge = $state(false);
   let showShareCard = $state(false);
   let totalRaised = $state(0);
   let loadingSummary = $state(false);
   let loadedSummaryToken = $state<string | null | undefined>(undefined);
+
+  // Stable guest session ID — persisted in localStorage so it survives page refresh
+  function getGuestSessionId(): string {
+    let id = localStorage.getItem('cp_guest_session');
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem('cp_guest_session', id);
+    }
+    return id;
+  }
 
   // ── Draggable hero words ───────────────────────
   interface Word { label: string; x: number; y: number; vx: number; vy: number; rot: number; vrot: number; scale: number; dragging: boolean; homeX: number; homeY: number; homeRot: number; }
@@ -128,7 +142,9 @@
   });
 
   async function loadLeaderboard() {
-    leaderboard = await getLeaderboard(period === 'month' ? 'month' : undefined);
+    const data = await getLeaderboard(period === 'month' ? 'month' : undefined, $authToken);
+    leaderboard = data.entries;
+    isPaidUser = data.is_paid_user;
   }
 
   async function loadMyStats() {
@@ -140,8 +156,10 @@
 
     loadingSummary = true;
     try {
-      mySummary = await getMySummary($authToken, period === 'month' ? 'month' : undefined);
+      const data: MySummary = await getMySummary($authToken, period === 'month' ? 'month' : undefined);
+      mySummary = data;
       loadedSummaryToken = $authToken;
+      if (data.is_paid_user) isPaidUser = true;
     } catch (e: any) {
       if (e instanceof AuthError) {
         authStore.clear();
@@ -172,10 +190,15 @@
 
     paying = true;
     try {
-      await initiatePayment(amount, name, $authToken, false);
+      await initiatePayment(amount, name, $authToken, false, $isLoggedIn ? null : getGuestSessionId());
       await loadLeaderboard();
       if ($isLoggedIn) await loadMyStats();
-      showSuccess = true;
+      isPaidUser = true; // set immediately after payment
+      if ($isLoggedIn) {
+        showSuccess = true;
+      } else {
+        showLoginNudge = true;
+      }
       toast.success(`Rs ${amount} paid successfully`);
     } catch (e: any) {
       if (e instanceof AuthError) {
@@ -227,13 +250,14 @@
   }
 
   function getSuccessMessage() {
-    if (!$isLoggedIn || !mySummary?.current_rank) {
-      return 'Your contribution is live on the board.';
+    const summary = mySummary;
+    if (!$isLoggedIn || !summary?.current_rank) {
+      return 'Your payment is live on the board.';
     }
-    if (mySummary.current_rank === 1) {
+    if (summary.current_rank === 1) {
       return 'You are leading the board right now.';
     }
-    return `You are now ranked #${mySummary.current_rank}.`;
+    return `You are now ranked #${summary.current_rank}.`;
   }
 
   async function shareRank() {
@@ -360,14 +384,6 @@
     <div class="hero-grid">
       <div class="form-card">
         <div class="inputs">
-          {#if !$isLoggedIn}
-            <input
-              type="text"
-              placeholder="Your name (optional)"
-              bind:value={userName}
-              disabled={paying}
-            />
-          {/if}
           <div class="amount-wrap">
             <span class="rupee">Rs</span>
             <input
@@ -537,7 +553,7 @@
       </div>
       <div class="board">
         {#each leaderboard as user, index}
-          <div class="card" class:champion={index === 0} class:elite={index < 3}>
+          <div class="card" class:champion={index === 0} class:elite={index < 3} class:blurred={!isPaidUser && index >= 10}>
             <div class="rank-badge" class:medal-badge={index < 3} class:gold={index === 0} class:silver={index === 1} class:bronze={index === 2}>
               {getMedal(index)}
             </div>
@@ -555,6 +571,13 @@
             <span>Be the first to get on the board.</span>
           </div>
         {/each}
+        {#if !isPaidUser}
+          <div class="board-lock">
+            <span>🔒</span>
+            <p>Pay once to unlock the full leaderboard (top 50)</p>
+            <button class="lock-cta" onclick={handlePayment}>Unlock for Rs 10</button>
+          </div>
+        {/if}
       </div>
     </section>
 
@@ -563,19 +586,49 @@
         <h2>Live Activity</h2>
         <span class="live-dot"></span>
       </div>
-      <div class="feed-box">
+      <div class="feed-box" class:feed-locked={!isPaidUser}>
         {#each activities as activity}
-          <div class="feed-item">{activity.text}</div>
+          <div class="feed-item">{isPaidUser ? activity.text : (activity.masked_text ?? activity.text)}</div>
         {:else}
           <div class="empty">
             <p>Waiting for activity</p>
             <span>New payments will show up here in real time.</span>
           </div>
         {/each}
+        {#if !isPaidUser && activities.length > 0}
+          <div class="feed-lock-overlay">
+            <span class="lock-icon">🔒</span>
+            <p>Pay once to see real names</p>
+            <button class="lock-cta" onclick={handlePayment}>Unlock for Rs 10</button>
+          </div>
+        {/if}
       </div>
     </section>
   </div>
 </div>
+
+{#if showLoginNudge}
+  <div class="success-overlay" role="dialog" aria-modal="true" tabindex="-1">
+    <div class="success-burst">
+      <div class="success-glow success-glow-a"></div>
+      <div class="success-glow success-glow-b"></div>
+      <div class="success-orbit"></div>
+      <div class="success-icon">🔥</div>
+      <p class="success-kicker">You're on the board!</p>
+      <p class="success-text">Rs {amount.toLocaleString('en-IN')} paid</p>
+      <p class="success-copy">Create a free account to track your rank, build streaks, and see where you stand.</p>
+      <a
+        href="/login"
+        class="share-btn"
+        style="display:block; text-align:center; text-decoration:none; margin-top:18px;"
+        onclick={() => showLoginNudge = false}
+      >
+        Login to claim your rank 🚀
+      </a>
+      <button class="close-btn success-close" onclick={() => showLoginNudge = false}>Skip for now</button>
+    </div>
+  </div>
+{/if}
 
 {#if showSuccess}
   <div class="success-overlay" role="dialog" aria-modal="true" tabindex="-1">
@@ -1557,6 +1610,65 @@
     position: relative;
     z-index: 1;
     margin-top: 10px;
+  }
+
+  /* ── Paid/Free gating ─────────────────────── */
+  .card.blurred {
+    filter: blur(4px);
+    pointer-events: none;
+    user-select: none;
+    opacity: 0.5;
+  }
+
+  .board-lock {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 20px;
+    border-radius: 14px;
+    border: 1px dashed rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.02);
+    text-align: center;
+  }
+
+  .board-lock span { font-size: 1.4rem; }
+  .board-lock p { margin: 0; font-size: 13px; color: #666; }
+
+  .feed-box { position: relative; }
+
+  .feed-locked .feed-item:nth-child(n+3) {
+    filter: blur(3px);
+    pointer-events: none;
+    user-select: none;
+    opacity: 0.5;
+  }
+
+  .feed-lock-overlay {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    border-radius: 14px;
+    border: 1px dashed rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.02);
+    text-align: center;
+  }
+
+  .feed-lock-overlay .lock-icon { font-size: 1.2rem; }
+  .feed-lock-overlay p { margin: 0; font-size: 13px; color: #666; }
+
+  .lock-cta {
+    padding: 8px 18px;
+    border-radius: 999px;
+    border: none;
+    background: linear-gradient(90deg, #ff4d4d, #ffcc00);
+    color: black;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 4px;
   }
 
   @media (max-width: 900px) {

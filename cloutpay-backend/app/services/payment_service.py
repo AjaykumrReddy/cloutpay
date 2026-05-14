@@ -11,7 +11,7 @@ class PaymentService:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_order(self, user_id: int | None, amount: int, customer_phone: str = "9999999999"):
+    def create_order(self, user_id: int | None, amount: int, customer_phone: str = "9999999999", guest_session_id: str | None = None):
         if amount < 1:
             raise ValueError("Minimum amount is Rs 1")
 
@@ -41,6 +41,7 @@ class PaymentService:
             user_id=user_id,
             cf_order_id=cf_order_id,
             payment_session_id=payment_session_id,
+            guest_session_id=guest_session_id if not user_id else None,
             amount=amount,
             status="created",
         )

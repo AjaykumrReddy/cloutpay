@@ -25,18 +25,15 @@
   let error = $state('');
   let page = $state(1);
   let hasMore = $state(false);
+  let dataLoaded = $state(false);
 
   const totalAmount = $derived(summary?.total_contributed ?? 0);
   const biggestPayment = $derived(summary?.biggest_payment ?? 0);
   const averagePayment = $derived(summary?.average_payment ?? 0);
 
-  onMount(async () => {
-    const token = get(authToken);
-    if (!token) {
-      goto('/login');
-      return;
-    }
-
+  async function loadData(token: string) {
+    if (dataLoaded) return;
+    dataLoaded = true;
     try {
       const [history, mySummary] = await Promise.all([
         getHistory(token, 1),
@@ -55,6 +52,23 @@
       error = e?.message || 'Failed to load your history';
     } finally {
       loading = false;
+    }
+  }
+
+  onMount(() => {
+    const token = get(authToken);
+    if (token) loadData(token); // only load if token already available (navigating from another page)
+  });
+
+  // Fallback: wait for auth store to hydrate from localStorage after refresh
+  $effect(() => {
+    const token = $authToken;
+    if (token === undefined) return; // not yet hydrated — wait
+    if (!token && !dataLoaded) {
+      loading = false;
+      goto('/login');
+    } else if (token && !dataLoaded) {
+      loadData(token);
     }
   });
 
@@ -170,7 +184,14 @@
       {#if payments.length === 0}
         <div class="empty">
           <p>No payments yet.</p>
-          <a href="/" class="cta">Make your first contribution</a>
+          <a href="/" class="cta">Make your first payment</a>
+        </div>
+      {:else if !summary || summary.payments_count === 0}
+        <div class="unpaid-wall">
+          <span class="wall-icon">🔒</span>
+          <h2>Members only</h2>
+          <p>Make your first payment to unlock your full history, rank stats and insights.</p>
+          <a href="/" class="cta">Pay to unlock</a>
         </div>
       {:else}
         <div class="list">
@@ -324,6 +345,23 @@
     margin-top: 60px;
     color: #6d6d6d;
   }
+
+  .unpaid-wall {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin-top: 60px;
+    padding: 40px 24px;
+    border-radius: 20px;
+    border: 1px dashed rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.02);
+    text-align: center;
+  }
+
+  .wall-icon { font-size: 2rem; }
+  .unpaid-wall h2 { margin: 0; font-size: 1.3rem; font-weight: 800; color: white; }
+  .unpaid-wall p { margin: 0; color: #666; font-size: 14px; max-width: 320px; line-height: 1.5; }
 
   .cta {
     display: inline-block;

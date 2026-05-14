@@ -26,21 +26,21 @@ async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
 	return res;
 }
 
-export async function createOrder(amount: number, token?: string | null) {
+export async function createOrder(amount: number, token?: string | null, guestSessionId?: string | null) {
 	const res = await apiFetch(`${API_BASE}/payments/create-order`, {
 		method: 'POST',
 		headers: authHeaders(token),
-		body: JSON.stringify({ amount })
+		body: JSON.stringify({ amount, guest_session_id: guestSessionId || null })
 	});
 	if (!res.ok) throw new Error('Failed to create order');
 	return res.json() as Promise<{ cf_order_id: string; payment_session_id: string; amount: number }>;
 }
 
-export async function getLeaderboard(period?: 'month') {
+export async function getLeaderboard(period?: 'month', token?: string | null) {
 	const url = period ? `${API_BASE}/leaderboard?period=${period}` : `${API_BASE}/leaderboard`;
-	const res = await apiFetch(url);
+	const res = await apiFetch(url, { headers: authHeaders(token) });
 	if (!res.ok) throw new Error('Failed to fetch leaderboard');
-	return res.json();
+	return res.json() as Promise<{ entries: { name: string; amount: number }[]; is_paid_user: boolean }>;
 }
 
 export async function getHistory(token: string, page = 1) {
@@ -111,5 +111,15 @@ export async function getHallOfFame(): Promise<HallOfFameEntry[]> {
 export async function getMyLocation(token: string): Promise<{ city: string | null; state: string | null }> {
 	const res = await apiFetch(`${API_BASE}/auth/my-location`, { headers: authHeaders(token) });
 	if (!res.ok) throw new Error('Failed to fetch location');
+	return res.json();
+}
+
+export async function claimGuestPayments(token: string, guestSessionId: string): Promise<{ claimed: number; display_name: string }> {
+	const res = await apiFetch(`${API_BASE}/payments/claim-guest`, {
+		method: 'POST',
+		headers: authHeaders(token),
+		body: JSON.stringify({ guest_session_id: guestSessionId }),
+	});
+	if (!res.ok) throw new Error('Failed to claim payments');
 	return res.json();
 }

@@ -6,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.dependencies import get_current_user_id
+from app.dependencies import get_current_user_id, get_optional_user_id
 from app.models.payment import Payment, PaymentOrder
 from app.models.users import User
 
@@ -18,7 +18,13 @@ def _month_start() -> datetime:
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
-def _build_leaderboard(db: Session, since: Optional[datetime] = None) -> list[dict]:
+def _is_paid_user(db: Session, user_id: Optional[int]) -> bool:
+    if not user_id:
+        return False
+    return db.query(PaymentOrder.id).filter_by(user_id=user_id, status="paid").first() is not None
+
+
+def _build_leaderboard(db: Session, since: Optional[datetime] = None, limit: int = 10) -> list[dict]:
     q = db.query(Payment.user_name, func.sum(Payment.amount).label("total"))
     if since:
         q = q.filter(Payment.created_at >= since)
@@ -27,7 +33,7 @@ def _build_leaderboard(db: Session, since: Optional[datetime] = None) -> list[di
         q.filter(Payment.user_name != "Anonymous")
         .group_by(Payment.user_name)
         .order_by(func.sum(Payment.amount).desc())
-        .limit(10)
+        .limit(limit)
         .all()
     )
 
@@ -41,7 +47,7 @@ def _build_leaderboard(db: Session, since: Optional[datetime] = None) -> list[di
     if anon_total:
         leaderboard.append({"name": "Someone", "amount": int(anon_total)})
         leaderboard.sort(key=lambda x: x["amount"], reverse=True)
-        leaderboard = leaderboard[:10]
+        leaderboard = leaderboard[:limit]
 
     return leaderboard
 
@@ -50,9 +56,13 @@ def _build_leaderboard(db: Session, since: Optional[datetime] = None) -> list[di
 def get_leaderboard(
     period: Optional[str] = Query(None, pattern="^month$"),
     db: Session = Depends(get_db),
+    user_id: Optional[int] = Depends(get_optional_user_id),
 ):
     since = _month_start() if period == "month" else None
-    return _build_leaderboard(db, since)
+    paid = _is_paid_user(db, user_id)
+    limit = 50 if paid else 10
+    entries = _build_leaderboard(db, since, limit)
+    return {"entries": entries, "is_paid_user": paid}
 
 
 @router.get("/payments/history")
@@ -172,6 +182,7 @@ def get_my_summary(
             "last_payment_at": last_payment_at,
             "current_streak": user.current_streak or 0,
             "longest_streak": user.longest_streak or 0,
+            "is_paid_user": payments_count > 0,
         }
     except HTTPException:
         raise

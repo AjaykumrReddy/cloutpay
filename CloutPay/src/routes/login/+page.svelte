@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { sendOtp, verifyOtp, authStore } from '$lib/auth';
+  import { claimGuestPayments } from '$lib/api';
   import { toast } from '$lib/toast';
 
   type Step = 'phone' | 'otp';
@@ -36,6 +37,19 @@
     try {
       const result = await verifyOtp(phone.trim(), code.trim());
       authStore.setAuth(result.token, result.display_name, result.share_token);
+
+      // Claim any anonymous payments made before login
+      try {
+        const guestSessionId = localStorage.getItem('cp_guest_session');
+        if (guestSessionId) {
+          const claimed = await claimGuestPayments(result.token, guestSessionId);
+          if (claimed.claimed > 0) {
+            localStorage.removeItem('cp_guest_session'); // clear after claiming
+            toast.success(`${claimed.claimed} payment${claimed.claimed > 1 ? 's' : ''} linked to your account 🎉`);
+          }
+        }
+      } catch {}
+
       if (result.is_new_user || !result.display_name) {
         goto('/profile/setup');
       } else {

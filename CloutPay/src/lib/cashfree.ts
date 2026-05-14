@@ -17,11 +17,12 @@ export async function initiatePayment(
 	amount: number,
 	userName: string,
 	token?: string | null,
-	anonymous = false
+	anonymous = false,
+	guestSessionId?: string | null
 ) {
 	await loadCashfreeSDK();
 
-	const order = await createOrder(amount, token);
+	const order = await createOrder(amount, token, guestSessionId);
 
 	const mode = PUBLIC_CASHFREE_ENV === 'PRODUCTION' ? 'production' : 'sandbox';
 
