@@ -3,37 +3,36 @@
   import { goto } from '$app/navigation';
   import { get } from 'svelte/store';
   import { authStore, authToken, displayName, updateProfile } from '$lib/auth';
-  import { AuthError, getMyBadges, type Badge } from '$lib/api';
+  import { AuthError, getMyBadges, getMySummary, type Badge } from '$lib/api';
   import { toast } from '$lib/toast';
 
   let name = $state(get(displayName) ?? '');
   let loading = $state(false);
   let badges = $state<Badge[]>([]);
+  let currentStreak = $state(0);
+  let longestStreak = $state(0);
 
   onMount(async () => {
     const token = get(authToken);
     if (!token) return;
     try {
-      badges = await getMyBadges(token);
+      const [b, summary] = await Promise.all([
+        getMyBadges(token),
+        getMySummary(token),
+      ]);
+      badges = b;
+      currentStreak = summary.current_streak ?? 0;
+      longestStreak = summary.longest_streak ?? 0;
     } catch {}
   });
 
   async function handleSave() {
     const trimmed = name.trim();
-    if (trimmed.length < 2) {
-      toast.error('Name must be at least 2 characters');
-      return;
-    }
-    if (trimmed.length > 30) {
-      toast.error('Name must be under 30 characters');
-      return;
-    }
+    if (trimmed.length < 2) { toast.error('Name must be at least 2 characters'); return; }
+    if (trimmed.length > 30) { toast.error('Name must be under 30 characters'); return; }
 
     const token = get(authToken);
-    if (!token) {
-      goto('/login');
-      return;
-    }
+    if (!token) { goto('/login'); return; }
 
     loading = true;
     try {
@@ -53,6 +52,14 @@
       loading = false;
     }
   }
+
+  function streakEmoji(streak: number) {
+    if (streak >= 30) return '👑';
+    if (streak >= 14) return '⚡';
+    if (streak >= 7) return '🔥';
+    if (streak >= 3) return '🎯';
+    return '🔥';
+  }
 </script>
 
 <div class="page">
@@ -65,7 +72,27 @@
     </div>
 
     <h1>Edit Profile</h1>
-    <p class="sub">Keep your public name sharp so your contributions look intentional on the board.</p>
+    <p class="sub">Keep your public name sharp so your rank looks intentional on the board.</p>
+
+    {#if currentStreak > 0}
+      <div class="streak-banner">
+        <div class="streak-item">
+          <span class="streak-emoji">{streakEmoji(currentStreak)}</span>
+          <div>
+            <p class="streak-value">{currentStreak} day{currentStreak !== 1 ? 's' : ''}</p>
+            <p class="streak-label">Current streak</p>
+          </div>
+        </div>
+        <div class="streak-divider"></div>
+        <div class="streak-item">
+          <span class="streak-emoji">🏆</span>
+          <div>
+            <p class="streak-value">{longestStreak} day{longestStreak !== 1 ? 's' : ''}</p>
+            <p class="streak-label">Longest streak</p>
+          </div>
+        </div>
+      </div>
+    {/if}
 
     <label class="label" for="display-name">Display name</label>
     <input
@@ -76,9 +103,8 @@
       maxlength="30"
       bind:value={name}
       disabled={loading}
-      onkeydown={(event) => event.key === 'Enter' && handleSave()}
+      onkeydown={(e) => e.key === 'Enter' && handleSave()}
     />
-
     <p class="hint">This name is used on the leaderboard and in your payment history.</p>
 
     {#if badges.length > 0}
@@ -148,12 +174,7 @@
     flex-wrap: wrap;
   }
 
-  .back,
-  .secondary-link {
-    color: #9b9b9b;
-    text-decoration: none;
-    font-size: 13px;
-  }
+  .back, .secondary-link { color: #9b9b9b; text-decoration: none; font-size: 13px; }
 
   h1 {
     margin: 0 0 8px;
@@ -164,19 +185,53 @@
     -webkit-text-fill-color: transparent;
   }
 
-  .sub {
-    margin: 0 0 22px;
-    color: #a0a0a0;
-    line-height: 1.5;
-    font-size: 14px;
+  .sub { margin: 0 0 22px; color: #a0a0a0; line-height: 1.5; font-size: 14px; }
+
+  /* ── Streak banner ── */
+  .streak-banner {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 16px 20px;
+    border-radius: 16px;
+    background: rgba(255, 77, 77, 0.07);
+    border: 1px solid rgba(255, 77, 77, 0.2);
+    margin-bottom: 22px;
   }
 
-  .label {
-    display: block;
-    margin-bottom: 8px;
-    font-size: 13px;
-    color: #c7c7c7;
+  .streak-item {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
+
+  .streak-emoji { font-size: 1.6rem; line-height: 1; }
+
+  .streak-value {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: white;
+    line-height: 1.2;
+  }
+
+  .streak-label {
+    margin: 0;
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .streak-divider {
+    width: 1px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.08);
+    margin: 0 16px;
+  }
+
+  .label { display: block; margin-bottom: 8px; font-size: 13px; color: #c7c7c7; }
 
   .name-input {
     width: 100%;
@@ -190,11 +245,7 @@
     outline: none;
   }
 
-  .hint {
-    margin: 10px 0 20px;
-    color: #7e7e7e;
-    font-size: 12px;
-  }
+  .hint { margin: 10px 0 20px; color: #7e7e7e; font-size: 12px; }
 
   .btn {
     width: 100%;
@@ -205,27 +256,11 @@
     cursor: pointer;
   }
 
-  .btn.primary {
-    border: none;
-    color: black;
-    background: linear-gradient(90deg, #ff4d4d, #ffcc00);
-  }
+  .btn.primary { border: none; color: black; background: linear-gradient(90deg, #ff4d4d, #ffcc00); }
+  .btn.ghost { margin-top: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: white; }
+  .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
-  .btn.ghost {
-    margin-top: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.04);
-    color: white;
-  }
-
-  .btn:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-
-  .badges-section {
-    margin-bottom: 20px;
-  }
+  .badges-section { margin-bottom: 20px; }
 
   .badges-label {
     margin: 0 0 10px;
@@ -236,11 +271,7 @@
     font-weight: 700;
   }
 
-  .badges-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-  }
+  .badges-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 
   .badge-item {
     display: flex;
@@ -263,31 +294,13 @@
     background: rgba(255, 204, 0, 0.05);
   }
 
-  .badge-emoji {
-    font-size: 1.5rem;
-    line-height: 1;
-  }
+  .badge-emoji { font-size: 1.5rem; line-height: 1; }
 
-  .badge-name {
-    font-size: 10px;
-    font-weight: 700;
-    color: #aaa;
-    text-align: center;
-    letter-spacing: 0.3px;
-  }
-
-  .badge-item.earned .badge-name {
-    color: #ffdf71;
-  }
+  .badge-name { font-size: 10px; font-weight: 700; color: #aaa; text-align: center; }
+  .badge-item.earned .badge-name { color: #ffdf71; }
 
   @media (max-width: 540px) {
-    .card {
-      padding: 28px 20px;
-    }
-
-    .topline {
-      flex-direction: column;
-      align-items: flex-start;
-    }
+    .card { padding: 28px 20px; }
+    .topline { flex-direction: column; align-items: flex-start; }
   }
 </style>

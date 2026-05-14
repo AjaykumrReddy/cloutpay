@@ -22,19 +22,19 @@ BADGES = [
         "id": "first_blood",
         "emoji": "🔥",
         "label": "First Blood",
-        "desc": "Made your first contribution",
+        "desc": "Made your first payment",
     },
     {
         "id": "1k_club",
         "emoji": "💎",
         "label": "Rs 1K Club",
-        "desc": "Contributed Rs 1,000 or more in total",
+        "desc": "Paid Rs 1,000 or more in total",
     },
     {
         "id": "10k_club",
         "emoji": "👑",
         "label": "Rs 10K Club",
-        "desc": "Contributed Rs 10,000 or more in total",
+        "desc": "Paid Rs 10,000 or more in total",
     },
     {
         "id": "top_dog",
@@ -46,7 +46,7 @@ BADGES = [
         "id": "consistent",
         "emoji": "🎯",
         "label": "Consistent",
-        "desc": "Contributed in 3 or more different months",
+        "desc": "Paid in 3 or more different months",
     },
     {
         "id": "high_roller",
@@ -54,40 +54,57 @@ BADGES = [
         "label": "High Roller",
         "desc": "Made a single payment of Rs 500 or more",
     },
+    {
+        "id": "streak_3",
+        "emoji": "🎯",
+        "label": "3 Day Streak",
+        "desc": "Paid 3 days in a row",
+    },
+    {
+        "id": "streak_7",
+        "emoji": "🔥",
+        "label": "Week Warrior",
+        "desc": "Paid 7 days in a row",
+    },
+    {
+        "id": "streak_30",
+        "emoji": "💥",
+        "label": "Unstoppable",
+        "desc": "Paid 30 days in a row",
+    },
 ]
 
 
 def _compute_badges(
     payments: list,
     total: int,
-    current_rank: Optional[int],
+    current_rank: int | None,
     biggest_payment: int,
+    longest_streak: int = 0,
 ) -> list[dict]:
     earned = set()
 
     if payments:
         earned.add("first_blood")
-
     if total >= 1000:
         earned.add("1k_club")
-
     if total >= 10000:
         earned.add("10k_club")
-
     if current_rank == 1:
         earned.add("top_dog")
-
     months = {p.created_at.strftime("%Y-%m") for p in payments}
     if len(months) >= 3:
         earned.add("consistent")
-
     if biggest_payment >= 500:
         earned.add("high_roller")
+    if longest_streak >= 3:
+        earned.add("streak_3")
+    if longest_streak >= 7:
+        earned.add("streak_7")
+    if longest_streak >= 30:
+        earned.add("streak_30")
 
-    return [
-        {**b, "earned": b["id"] in earned}
-        for b in BADGES
-    ]
+    return [{**b, "earned": b["id"] in earned} for b in BADGES]
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -129,7 +146,7 @@ def get_my_badges(
             (i + 1 for i, name in enumerate(totals) if name == user.display_name), None
         )
 
-    return _compute_badges(payments, int(total), current_rank, int(biggest))
+    return _compute_badges(payments, int(total), current_rank, int(biggest), user.longest_streak or 0)
 
 
 @router.get("/hall-of-fame")

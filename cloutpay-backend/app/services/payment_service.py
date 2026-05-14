@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.payment import Payment, PaymentOrder
 from app.models.users import User
 from app.services.cashfree_service import create_cashfree_order, get_cashfree_order
+from app.services.streak_service import update_streak
 
 
 class PaymentService:
@@ -99,5 +100,9 @@ class PaymentService:
         )
         self.db.add(payment)
         self.db.flush()
+
+        # Update streak for logged-in users
+        if user_id:
+            update_streak(self.db, user_id)
 
         return payment, True

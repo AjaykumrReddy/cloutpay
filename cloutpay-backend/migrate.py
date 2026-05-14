@@ -8,10 +8,10 @@ from sqlalchemy import text
 print("Starting migration...", flush=True)
 
 with engine.begin() as conn:
-    conn.execute(text('ALTER TABLE payment_orders ALTER COLUMN razorpay_order_id DROP NOT NULL'))
-    result = conn.execute(text("SELECT column_name, is_nullable FROM information_schema.columns WHERE table_name='payment_orders' AND column_name='razorpay_order_id'"))
-    for r in result:
-        print(dict(r._mapping))
-    print('Done', flush=True)
+    conn.execute(text('ALTER TABLE users ADD COLUMN IF NOT EXISTS current_streak INTEGER DEFAULT 0'))
+    conn.execute(text('ALTER TABLE users ADD COLUMN IF NOT EXISTS longest_streak INTEGER DEFAULT 0'))
+    conn.execute(text('ALTER TABLE users ADD COLUMN IF NOT EXISTS last_payment_date DATE'))
+    result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='users' ORDER BY column_name"))
+    print('users columns:', [r[0] for r in result], flush=True)
 
 print("Migration complete!", flush=True)

@@ -26,6 +26,8 @@
     amount_to_next_rank: number | null;
     next_rank_name: string | null;
     last_payment_at: string | null;
+    current_streak: number;
+    longest_streak: number;
   }
 
   let leaderboard = $state<LeaderboardEntry[]>([]);
@@ -37,7 +39,6 @@
   let paying = $state(false);
   let amount = $state(100);
   let userName = $state('');
-  let anonymous = $state(false);
   let showSuccess = $state(false);
   let showShareCard = $state(false);
   let totalRaised = $state(0);
@@ -164,15 +165,15 @@
   }
 
   async function handlePayment() {
-    const name = anonymous ? 'Anonymous' : ($displayName || userName.trim() || 'Anonymous');
-    if (amount < 1) {
+    const name = $displayName || userName.trim() || 'Anonymous';
+    if (amount < 10) {
       toast.error('Minimum amount is Rs 10');
       return;
     }
 
     paying = true;
     try {
-      await initiatePayment(amount, name, $authToken, anonymous);
+      await initiatePayment(amount, name, $authToken, false);
       await loadLeaderboard();
       if ($isLoggedIn) await loadMyStats();
       showSuccess = true;
@@ -377,7 +378,7 @@
               type="text"
               placeholder="Your name (optional)"
               bind:value={userName}
-              disabled={paying || anonymous}
+              disabled={paying}
             />
           {/if}
           <div class="amount-wrap">
@@ -404,11 +405,6 @@
             </button>
           {/each}
         </div>
-
-        <label class="anon-toggle">
-          <input type="checkbox" bind:checked={anonymous} disabled={paying} />
-          <span>Stay anonymous</span>
-        </label>
 
         <button class="cta" onclick={handlePayment} disabled={paying}>
           {paying ? 'Processing...' : 'Claim your spot'}
@@ -473,6 +469,16 @@
               <p class="personal-copy">You are currently leading the board.</p>
             {:else}
               <p class="personal-copy">Pay a participation fee to start climbing the board.</p>
+            {/if}
+
+            {#if mySummary.current_streak > 0}
+              <div class="streak-row">
+                <span class="streak-fire">{mySummary.current_streak >= 7 ? '🔥' : mySummary.current_streak >= 3 ? '🎯' : '🔥'}</span>
+                <span class="streak-text">{mySummary.current_streak} day streak</span>
+                {#if mySummary.longest_streak > mySummary.current_streak}
+                  <span class="streak-best">best: {mySummary.longest_streak}</span>
+                {/if}
+              </div>
             {/if}
           {:else}
             <p class="personal-copy">
@@ -1084,15 +1090,6 @@
     color: white;
   }
 
-  .anon-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 16px;
-    color: #8e8e8e;
-    font-size: 13px;
-  }
-
   .cta {
     width: 100%;
     padding: 14px;
@@ -1191,6 +1188,33 @@
     color: #969696;
     font-size: 14px;
     line-height: 1.5;
+  }
+
+  .streak-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: rgba(255, 77, 77, 0.07);
+    border: 1px solid rgba(255, 77, 77, 0.18);
+  }
+
+  .streak-fire { font-size: 1.1rem; }
+
+  .streak-text {
+    font-size: 13px;
+    font-weight: 700;
+    color: #ff9a9a;
+    flex: 1;
+  }
+
+  .streak-best {
+    font-size: 11px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
   .content {

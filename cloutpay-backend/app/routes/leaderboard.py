@@ -170,6 +170,8 @@ def get_my_summary(
             "amount_to_next_rank": amount_to_next_rank,
             "next_rank_name": next_rank_name,
             "last_payment_at": last_payment_at,
+            "current_streak": user.current_streak or 0,
+            "longest_streak": user.longest_streak or 0,
         }
     except HTTPException:
         raise

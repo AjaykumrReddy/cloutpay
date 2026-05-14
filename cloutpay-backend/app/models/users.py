@@ -1,13 +1,13 @@
 from datetime import datetime
 import secrets
 
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Index
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Date, Index
 
 from app.db import Base
 
 
 def _generate_share_token() -> str:
-    return secrets.token_urlsafe(8)  # 11-char URL-safe string
+    return secrets.token_urlsafe(8)
 
 
 class User(Base):
@@ -19,6 +19,11 @@ class User(Base):
     phone_number = Column(String(15), unique=True, index=True, nullable=False)
     display_name = Column(String, nullable=True)
     share_token = Column(String(16), unique=True, index=True, nullable=True, default=_generate_share_token)
+
+    # Streaks
+    current_streak = Column(Integer, default=0, nullable=False)
+    longest_streak = Column(Integer, default=0, nullable=False)
+    last_payment_date = Column(Date, nullable=True)
 
     # Auth flags
     is_active = Column(Boolean, default=True)
