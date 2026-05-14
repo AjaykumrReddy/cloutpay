@@ -16,11 +16,12 @@
   let rank = $state<number | null>(null);
   let city = $state('');
   let region = $state('');
-  let dataLoaded = $state(false);
+  let profileLoaded = $state(false);
+  let loadingProfile = $state(false);
 
   async function loadData(token: string) {
-    if (dataLoaded) return;
-    dataLoaded = true;
+    if (loadingProfile || profileLoaded) return;
+    loadingProfile = true;
     try {
       const [b, summary, loc] = await Promise.all([
         getMyBadges(token),
@@ -34,11 +35,20 @@
       rank = summary.current_rank ?? null;
       city = loc.city ?? '';
       region = loc.state ?? '';
-      name = summary.display_name || get(displayName) || '';
+      name = summary.display_name || get(displayName) || name;
     } catch {}
+    finally {
+      loadingProfile = false;
+      profileLoaded = true;
+    }
   }
 
   onMount(() => {
+    const auth = get(authStore);
+    if (auth?.display_name) name = auth.display_name;
+    if (auth?.city) city = auth.city;
+    if (auth?.state) region = auth.state;
+
     const token = get(authToken);
     if (token) loadData(token);
   });
@@ -46,8 +56,8 @@
   $effect(() => {
     const token = $authToken;
     if (token === undefined) return; // not yet hydrated
-    if (!token && !dataLoaded) goto('/login');
-    else if (token && !dataLoaded) loadData(token);
+    if (!token && !profileLoaded) goto('/login');
+    else if (token && !profileLoaded) loadData(token);
   });
 
   async function handleSave() {
@@ -100,34 +110,42 @@
       <a href="/" class="back">← Home</a>
 
       <div class="avatar-wrap">
-        <div class="avatar">
-          {name ? name[0].toUpperCase() : '?'}
+        <div class="avatar" class:avatar-loading={!profileLoaded}>
+          {#if profileLoaded}
+            {name ? name[0].toUpperCase() : '?'}
+          {/if}
         </div>
-        {#if currentStreak > 0}
+        {#if currentStreak > 0 && profileLoaded}
           <span class="streak-badge">{streakEmoji(currentStreak)} {currentStreak}d</span>
         {/if}
       </div>
 
-      <h2 class="identity-name">{name || 'Your Name'}</h2>
+      <h2 class="identity-name">
+        {#if profileLoaded}
+          {name || 'Your Name'}
+        {:else}
+          <span class="text-skeleton skeleton"></span>
+        {/if}
+      </h2>
       {#if city || region}
         <p class="identity-location">📍 {city}{city && region ? ', ' : ''}{region}</p>
       {/if}
 
       <div class="stats-grid">
         <div class="stat-box">
-          <span class="stat-val">{rank ? `#${rank}` : '—'}</span>
+          <span class="stat-val" class:skeleton={!profileLoaded}>{profileLoaded ? (rank ? `#${rank}` : '—') : ''}</span>
           <span class="stat-lbl">Rank</span>
         </div>
         <div class="stat-box">
-          <span class="stat-val">Rs {totalPaid.toLocaleString('en-IN')}</span>
+          <span class="stat-val" class:skeleton={!profileLoaded}>{profileLoaded ? `Rs ${totalPaid.toLocaleString('en-IN')}` : ''}</span>
           <span class="stat-lbl">Total paid</span>
         </div>
         <div class="stat-box">
-          <span class="stat-val">{currentStreak}d</span>
+          <span class="stat-val" class:skeleton={!profileLoaded}>{profileLoaded ? `${currentStreak}d` : ''}</span>
           <span class="stat-lbl">Streak</span>
         </div>
         <div class="stat-box">
-          <span class="stat-val">{longestStreak}d</span>
+          <span class="stat-val" class:skeleton={!profileLoaded}>{profileLoaded ? `${longestStreak}d` : ''}</span>
           <span class="stat-lbl">Best streak</span>
         </div>
       </div>
@@ -166,6 +184,10 @@
       <h1>Edit Profile</h1>
       <p class="form-sub">Changes apply to your leaderboard name and local rankings.</p>
 
+      {#if loadingProfile}
+        <p class="status">Loading profile…</p>
+      {/if}
+
       <div class="field">
         <label for="dname">Display name</label>
         <input
@@ -174,7 +196,7 @@
           placeholder="Your display name"
           maxlength="30"
           bind:value={name}
-          disabled={loading}
+          disabled={loading || loadingProfile}
           onkeydown={(e) => e.key === 'Enter' && handleSave()}
         />
         <span class="char-count">{name.length}/30</span>
@@ -253,7 +275,7 @@
     flex-direction: column;
     gap: 16px;
     position: sticky;
-    top: 100px;
+    top: 120px;
   }
 
   .back {
@@ -275,7 +297,32 @@
     font-size: 2rem;
     font-weight: 900;
     color: black;
+    line-height: 1;
     box-shadow: 0 8px 32px rgba(255,100,0,0.3);
+  }
+
+  .avatar-loading {
+    background: rgba(255,255,255,0.08);
+    color: transparent;
+  }
+
+  .skeleton {
+    background: rgba(255,255,255,0.06);
+    color: transparent !important;
+    border-radius: 12px;
+    pointer-events: none;
+  }
+
+  .text-skeleton {
+    display: inline-block;
+    width: 140px;
+    height: 24px;
+  }
+
+  .status {
+    margin: 0 0 18px;
+    font-size: 12px;
+    color: #999;
   }
 
   .streak-badge {
