@@ -6,7 +6,6 @@
   import { authToken, displayName, isLoggedIn, authStore, shareToken } from '$lib/auth';
   import { initiatePayment } from '$lib/cashfree';
   import { toast } from '$lib/toast';
-
   type Period = 'all' | 'month';
 
   interface LeaderboardEntry {
@@ -329,18 +328,6 @@
 </script>
 
 <div class="page">
-
-  {#if activities.length > 0}
-    <div class="ticker-wrap">
-      <div class="ticker-track">
-        {#each [...activities, ...activities] as activity, i}
-          <span class="ticker-item">
-            <span class="ticker-dot"></span>{activity.text}
-          </span>
-        {/each}
-      </div>
-    </div>
-  {/if}
 
   <section class="hero">
     <div class="glow glow-a"></div>
@@ -697,50 +684,6 @@
     font-size: 12px;
     color: #ff9a9a;
     margin-bottom: 24px;
-  }
-
-  /* ── Ticker ───────────────────────────────────── */
-  .ticker-wrap {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 101;
-    overflow: hidden;
-    background: rgba(8, 8, 8, 0.92);
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid rgba(255, 77, 77, 0.15);
-    padding: 7px 0;
-  }
-
-  .ticker-track {
-    display: flex;
-    gap: 48px;
-    width: max-content;
-    animation: ticker-scroll 28s linear infinite;
-  }
-
-  .ticker-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    color: #ff9a9a;
-    white-space: nowrap;
-    font-weight: 500;
-  }
-
-  .ticker-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: #ff4d4d;
-    flex-shrink: 0;
-  }
-
-  @keyframes ticker-scroll {
-    from { transform: translateX(0); }
-    to   { transform: translateX(-50%); }
   }
 
   /* ── Spotlight card (guest) ───────────────────── */

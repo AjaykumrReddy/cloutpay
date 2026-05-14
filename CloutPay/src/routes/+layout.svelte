@@ -5,28 +5,39 @@
 	import { toast } from '$lib/toast';
 	import Toast from '$lib/Toast.svelte';
 	import { goto } from '$app/navigation';
+	import { PUBLIC_WS_URL } from '$env/static/public';
 
 	let { children } = $props();
 	let mobileMenuOpen = $state(false);
+	let activities = $state<{ text: string }[]>([]);
 
 	function logout() {
 		authStore.clear();
 		mobileMenuOpen = false;
 		toast.info('Logged out');
-		// once logout redirect to home
 		goto('/');
 	}
 
-	function closeMenu() {
-		mobileMenuOpen = false;
-	}
-
-	function toggleMenu() {
-		mobileMenuOpen = !mobileMenuOpen;
-	}
+	function closeMenu() { mobileMenuOpen = false; }
+	function toggleMenu() { mobileMenuOpen = !mobileMenuOpen; }
 
 	onMount(() => {
 		authStore.init();
+		['rzp_checkout_anon_id', 'rzp_device_id', 'rzp_stored_checkout_id'].forEach(k => localStorage.removeItem(k));
+
+		function connect() {
+			const ws = new WebSocket(PUBLIC_WS_URL);
+			ws.onmessage = (event) => {
+				const data = JSON.parse(event.data);
+				if (data.type === 'NEW_ACTIVITY') activities = [data.payload, ...activities].slice(0, 10);
+				if (data.type === 'INIT_ACTIVITIES') activities = data.payload;
+			};
+			ws.onerror = () => console.error('WebSocket error');
+			ws.onclose = () => setTimeout(connect, 3000);
+			return ws;
+		}
+		const ws = connect();
+		return () => ws.close();
 	});
 </script>
 
@@ -35,7 +46,20 @@
 </svelte:head>
 
 <div class="app-shell">
-	<nav class="nav">
+
+	{#if activities.length > 0}
+		<div class="ticker-wrap">
+			<div class="ticker-track">
+				{#each [...activities, ...activities] as activity}
+					<span class="ticker-item">
+						<span class="ticker-dot"></span>{activity.text}
+					</span>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
+	<nav class="nav" class:nav-with-ticker={activities.length > 0}>
 		<a href="/" class="logo" onclick={closeMenu}>CloutPay</a>
 
 		<div class="nav-links desktop-links">
@@ -126,10 +150,52 @@
 		overflow-x: clip;
 	}
 
-	:global(.app-shell:has(.ticker-wrap)) .nav {
-		top: calc(33px + 12px);
+	/* ── Ticker ── */
+	.ticker-wrap {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		z-index: 101;
+		overflow: hidden;
+		background: rgba(8, 8, 8, 0.92);
+		backdrop-filter: blur(8px);
+		border-bottom: 1px solid rgba(255, 77, 77, 0.15);
+		padding: 7px 0;
 	}
 
+	.ticker-track {
+		display: flex;
+		gap: 48px;
+		width: max-content;
+		animation: ticker-scroll 28s linear infinite;
+	}
+
+	.ticker-item {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: 12px;
+		color: #ff9a9a;
+		white-space: nowrap;
+		font-weight: 500;
+		font-family: 'Inter', sans-serif;
+	}
+
+	.ticker-dot {
+		width: 5px;
+		height: 5px;
+		border-radius: 50%;
+		background: #ff4d4d;
+		flex-shrink: 0;
+	}
+
+	@keyframes ticker-scroll {
+		from { transform: translateX(0); }
+		to   { transform: translateX(-50%); }
+	}
+
+	/* ── Nav ── */
 	.nav {
 		position: fixed;
 		top: 12px;
@@ -152,6 +218,11 @@
 			inset 0 1px 0 rgba(255, 255, 255, 0.08);
 		border-radius: 24px;
 		box-sizing: border-box;
+		transition: top 0.2s ease;
+	}
+
+	.nav.nav-with-ticker {
+		top: calc(33px + 12px);
 	}
 
 	.logo {
@@ -237,25 +308,12 @@
 		transition: transform 0.22s ease, opacity 0.22s ease;
 	}
 
-	.menu-toggle span.open:nth-child(1) {
-		transform: translateY(7px) rotate(45deg);
-	}
+	.menu-toggle span.open:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+	.menu-toggle span.open:nth-child(2) { opacity: 0; }
+	.menu-toggle span.open:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 
-	.menu-toggle span.open:nth-child(2) {
-		opacity: 0;
-	}
-
-	.menu-toggle span.open:nth-child(3) {
-		transform: translateY(-7px) rotate(-45deg);
-	}
-
-	.mobile-menu {
-		display: none;
-	}
-
-	.mobile-backdrop {
-		display: none;
-	}
+	.mobile-menu { display: none; }
+	.mobile-backdrop { display: none; }
 
 	@media (max-width: 900px) {
 		.nav {
@@ -264,6 +322,7 @@
 			padding: 10px 12px 10px 16px;
 			border-radius: 20px;
 		}
+		.nav.nav-with-ticker { top: calc(33px + 12px); }
 	}
 
 	@media (max-width: 820px) {
@@ -273,14 +332,10 @@
 			padding: 10px 12px;
 			border-radius: 18px;
 		}
+		.nav.nav-with-ticker { top: calc(33px + 10px); }
 
-		.desktop-links {
-			display: none;
-		}
-
-		.menu-toggle {
-			display: inline-flex;
-		}
+		.desktop-links { display: none; }
+		.menu-toggle { display: inline-flex; }
 
 		.mobile-backdrop {
 			display: block;
@@ -345,40 +400,19 @@
 			border: none;
 		}
 
-		.mobile-link.danger {
-			background: rgba(255, 255, 255, 0.03);
-		}
-
-		.mobile-label {
-			font-size: 14px;
-			font-weight: 700;
-			letter-spacing: 0.01em;
-		}
-
-		.mobile-meta {
-			font-size: 12px;
-			color: rgba(255, 255, 255, 0.58);
-		}
-
-		.primary-link .mobile-meta {
-			color: rgba(0, 0, 0, 0.72);
-		}
-
-		.logo {
-		font-size: 1.12rem;
-		}
+		.mobile-link.danger { background: rgba(255, 255, 255, 0.03); }
+		.mobile-label { font-size: 14px; font-weight: 700; letter-spacing: 0.01em; }
+		.mobile-meta { font-size: 12px; color: rgba(255, 255, 255, 0.58); }
+		.primary-link .mobile-meta { color: rgba(0, 0, 0, 0.72); }
+		.logo { font-size: 1.12rem; }
 	}
 
 	@media (max-width: 600px) {
-		.mobile-menu {
-			width: min(280px, 100%);
-		}
-
-		.mobile-link {
-			padding: 13px 14px;
-		}
+		.mobile-menu { width: min(280px, 100%); }
+		.mobile-link { padding: 13px 14px; }
 	}
 
+	/* ── Footer ── */
 	.footer {
 		border-top: 1px solid rgba(255,255,255,0.06);
 		padding: 32px 20px;

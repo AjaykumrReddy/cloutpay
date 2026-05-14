@@ -7,7 +7,7 @@
   import LocationPicker from '$lib/LocationPicker.svelte';
   import { toast } from '$lib/toast';
 
-  let name = $state(get(displayName) ?? '');
+  let name = $state('');
   let loading = $state(false);
   let badges = $state<Badge[]>([]);
   let currentStreak = $state(0);
@@ -16,10 +16,11 @@
   let rank = $state<number | null>(null);
   let city = $state('');
   let region = $state('');
+  let dataLoaded = $state(false);
 
-  onMount(async () => {
-    const token = get(authToken);
-    if (!token) return;
+  async function loadData(token: string) {
+    if (dataLoaded) return;
+    dataLoaded = true;
     try {
       const [b, summary, loc] = await Promise.all([
         getMyBadges(token),
@@ -33,7 +34,18 @@
       rank = summary.current_rank ?? null;
       city = loc.city ?? '';
       region = loc.state ?? '';
+      name = summary.display_name || get(displayName) || '';
     } catch {}
+  }
+
+  onMount(() => {
+    const token = get(authToken);
+    if (token) loadData(token);
+  });
+
+  $effect(() => {
+    const token = $authToken;
+    if (token && !dataLoaded) loadData(token);
   });
 
   async function handleSave() {
