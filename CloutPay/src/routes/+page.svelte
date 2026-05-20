@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { afterNavigate } from '$app/navigation';
   import { PUBLIC_WS_URL } from '$env/static/public';
-  import { getLeaderboard, getMySummary, AuthError, getHallOfFame, type HallOfFameEntry } from '$lib/api';
+  import { getLeaderboard, getMySummary, AuthError, getHallOfFame, getUserStatsByToken, type Badge, type HallOfFameEntry } from '$lib/api';
   import { authToken, displayName, isLoggedIn, authStore, shareToken } from '$lib/auth';
   import { initiatePayment } from '$lib/cashfree';
   import { toast } from '$lib/toast';
@@ -11,6 +11,7 @@
   interface LeaderboardEntry {
     name: string;
     amount: number;
+    share_token: string | null;
   }
 
   interface ActivityItem {
@@ -44,6 +45,21 @@
   let showSuccess = $state(false);
   let showLoginNudge = $state(false);
   let showShareCard = $state(false);
+
+  // User profile modal
+  interface UserProfile { display_name: string; total: number; rank: number | null; share_token: string; current_streak: number; longest_streak: number; city: string | null; state: string | null; badges: Badge[]; }
+  let selectedUser = $state<UserProfile | null>(null);
+  let loadingProfile = $state(false);
+
+  async function openUserProfile(shareToken: string | null) {
+    if (!isPaidUser || !shareToken) return;
+    loadingProfile = true;
+    selectedUser = null;
+    try {
+      selectedUser = await getUserStatsByToken(shareToken);
+    } catch { selectedUser = null; }
+    finally { loadingProfile = false; }
+  }
   let totalRaised = $state(0);
   let loadingSummary = $state(false);
   let loadedSummaryToken = $state<string | null | undefined>(undefined);
@@ -553,18 +569,45 @@
       </div>
       <div class="board">
         {#each leaderboard as user, index}
-          <div class="card" class:champion={index === 0} class:elite={index < 3} class:blurred={!isPaidUser && index >= 10}>
-            <div class="rank-badge" class:medal-badge={index < 3} class:gold={index === 0} class:silver={index === 1} class:bronze={index === 2}>
-              {getMedal(index)}
+          {#if isPaidUser && user.share_token}
+            <button
+              class="card clickable"
+              class:champion={index === 0}
+              class:elite={index < 3}
+              class:blurred={!isPaidUser && index >= 10}
+              type="button"
+              onclick={() => openUserProfile(user.share_token)}
+            >
+              <div class="rank-badge" class:medal-badge={index < 3} class:gold={index === 0} class:silver={index === 1} class:bronze={index === 2}>
+                {getMedal(index)}
+              </div>
+              <div class="card-info">
+                <span class="card-name">{user.name}</span>
+                {#if index < 3}
+                  <span class="card-tier">{getTierLabel(index)}</span>
+                {/if}
+              </div>
+              <div class="card-amount">Rs {user.amount.toLocaleString('en-IN')}</div>
+            </button>
+          {:else}
+            <div
+              class="card"
+              class:champion={index === 0}
+              class:elite={index < 3}
+              class:blurred={!isPaidUser && index >= 10}
+            >
+              <div class="rank-badge" class:medal-badge={index < 3} class:gold={index === 0} class:silver={index === 1} class:bronze={index === 2}>
+                {getMedal(index)}
+              </div>
+              <div class="card-info">
+                <span class="card-name">{user.name}</span>
+                {#if index < 3}
+                  <span class="card-tier">{getTierLabel(index)}</span>
+                {/if}
+              </div>
+              <div class="card-amount">Rs {user.amount.toLocaleString('en-IN')}</div>
             </div>
-            <div class="card-info">
-              <span class="card-name">{user.name}</span>
-              {#if index < 3}
-                <span class="card-tier">{getTierLabel(index)}</span>
-              {/if}
-            </div>
-            <div class="card-amount">Rs {user.amount.toLocaleString('en-IN')}</div>
-          </div>
+          {/if}
         {:else}
           <div class="empty">
             <p>No supporters yet</p>
@@ -606,6 +649,56 @@
     </section>
   </div>
 </div>
+
+{#if selectedUser}
+  <div
+    class="success-overlay"
+    role="button"
+    tabindex="0"
+    aria-label="Close profile"
+    onclick={() => selectedUser = null}
+    onkeydown={(e) => e.key === 'Escape' && (selectedUser = null)}
+  >
+    <div class="user-profile-card" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+      <div class="success-glow success-glow-a"></div>
+      <div class="success-glow success-glow-b"></div>
+      <p class="rank-card-brand">CloutPay</p>
+      <p class="upc-rank">{selectedUser.rank ? `#${selectedUser.rank}` : '🔥'}</p>
+      <p class="upc-name">{selectedUser.display_name}</p>
+      {#if selectedUser.city || selectedUser.state}
+        <p class="upc-location">📍 {selectedUser.city ?? ''}{selectedUser.city && selectedUser.state ? ', ' : ''}{selectedUser.state ?? ''}</p>
+      {/if}
+      <p class="upc-total">Rs {selectedUser.total.toLocaleString('en-IN')} total paid</p>
+      {#if selectedUser.current_streak > 0}
+        <div class="upc-streak">
+          <span>{selectedUser.current_streak >= 7 ? '🔥' : '🎯'} {selectedUser.current_streak} day streak</span>
+          {#if selectedUser.longest_streak > selectedUser.current_streak}
+            <span class="upc-best">best: {selectedUser.longest_streak}d</span>
+          {/if}
+        </div>
+      {/if}
+      <div class="upc-badges">
+        <p class="upc-badges-label">Badges</p>
+        <div class="badge-list">
+          {#if selectedUser.badges.some((badge) => badge.earned)}
+            {#each selectedUser.badges.filter((badge) => badge.earned) as badge}
+              <span class="profile-badge" title={badge.desc}>{badge.emoji} {badge.label}</span>
+            {/each}
+          {:else}
+            <span class="no-badges">No public badges yet</span>
+          {/if}
+        </div>
+      </div>
+      <button class="close-btn" style="margin-top:20px" onclick={() => selectedUser = null}>Close</button>
+    </div>
+  </div>
+{/if}
+
+{#if loadingProfile}
+  <div class="success-overlay" role="status">
+    <div class="loading-spinner">Loading...</div>
+  </div>
+{/if}
 
 {#if showLoginNudge}
   <div class="success-overlay" role="dialog" aria-modal="true" tabindex="-1">
@@ -1613,11 +1706,127 @@
   }
 
   /* ── Paid/Free gating ─────────────────────── */
-  .card.blurred {
-    filter: blur(4px);
-    pointer-events: none;
-    user-select: none;
-    opacity: 0.5;
+  .card.clickable {
+    cursor: pointer;
+    transition: background 0.18s, border-color 0.18s;
+  }
+
+  .card.clickable:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .user-profile-card {
+    position: relative;
+    text-align: center;
+    padding: 40px 32px 32px;
+    width: min(320px, calc(100vw - 40px));
+    border-radius: 28px;
+    background: linear-gradient(160deg, #1a1a1a, #0d0d0d);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+  }
+
+  .upc-rank {
+    position: relative;
+    z-index: 1;
+    margin: 0 0 8px;
+    font-size: 3.5rem;
+    font-weight: 900;
+    letter-spacing: -2px;
+    line-height: 1;
+    background: linear-gradient(180deg, #ffffff, #aaaaaa);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .upc-name {
+    position: relative;
+    z-index: 1;
+    margin: 0 0 6px;
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: #f0f0f0;
+  }
+
+  .upc-location {
+    position: relative;
+    z-index: 1;
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: #555;
+  }
+
+  .upc-total {
+    position: relative;
+    z-index: 1;
+    margin: 0 0 12px;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #ffdf71;
+  }
+
+  .upc-streak {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(255, 77, 77, 0.08);
+    border: 1px solid rgba(255, 77, 77, 0.2);
+    font-size: 13px;
+    font-weight: 600;
+    color: #ff9a9a;
+  }
+
+  .upc-best { color: #555; font-size: 11px; }
+
+  .upc-badges {
+    margin-top: 18px;
+    text-align: center;
+  }
+
+  .upc-badges-label {
+    margin: 0 0 10px;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #ffcc00;
+    font-weight: 700;
+  }
+
+  .badge-list {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .profile-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 13px;
+  }
+
+  .no-badges {
+    color: #aaa;
+    font-size: 13px;
+  }
+
+  .loading-spinner {
+    color: #666;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
   }
 
   .board-lock {

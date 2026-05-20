@@ -40,7 +40,7 @@ export async function getLeaderboard(period?: 'month', token?: string | null) {
 	const url = period ? `${API_BASE}/leaderboard?period=${period}` : `${API_BASE}/leaderboard`;
 	const res = await apiFetch(url, { headers: authHeaders(token) });
 	if (!res.ok) throw new Error('Failed to fetch leaderboard');
-	return res.json() as Promise<{ entries: { name: string; amount: number }[]; is_paid_user: boolean }>;
+	return res.json() as Promise<{ entries: { name: string; amount: number; share_token: string | null }[]; is_paid_user: boolean }>;
 }
 
 export async function getHistory(token: string, page = 1) {
@@ -113,6 +113,18 @@ export async function getMyLocation(token: string): Promise<{ city: string | nul
 	if (!res.ok) throw new Error('Failed to fetch location');
 	return res.json();
 }
+
+export async function getUserStatsByToken(token: string): Promise<{
+	display_name: string; total: number; rank: number | null;
+	share_token: string; current_streak: number; longest_streak: number;
+	city: string | null; state: string | null;
+	badges: Badge[];
+}> {
+	const res = await apiFetch(`${API_BASE}/share/${encodeURIComponent(token)}/stats`);
+	if (!res.ok) throw new Error('User not found');
+	return res.json();
+}
+
 
 export async function claimGuestPayments(token: string, guestSessionId: string): Promise<{ claimed: number; display_name: string }> {
 	const res = await apiFetch(`${API_BASE}/payments/claim-guest`, {

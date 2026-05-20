@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.payment import Payment, PaymentOrder
 from app.models.users import User
+from app.routes.badges import _compute_badges
 
 router = APIRouter(prefix="/share", tags=["share"])
 
@@ -43,7 +44,25 @@ def _get_user_stats(share_token: str, db: Session) -> Optional[dict]:
 
     rank = next((i + 1 for i, name in enumerate(totals) if name == user.display_name), None)
 
-    return {"display_name": user.display_name, "total": int(total), "rank": rank}
+    payments = (
+        db.query(Payment)
+        .filter(Payment.order_id.in_(order_ids))
+        .all()
+    )
+    biggest_payment = max((p.amount for p in payments), default=0)
+    badges = _compute_badges(payments, int(total), rank, int(biggest_payment), user.longest_streak or 0)
+
+    return {
+        "display_name": user.display_name,
+        "total": int(total),
+        "rank": rank,
+        "share_token": user.share_token,
+        "current_streak": user.current_streak or 0,
+        "longest_streak": user.longest_streak or 0,
+        "city": user.city,
+        "state": user.state,
+        "badges": badges,
+    }
 
 
 @router.get("/{share_token}/stats")

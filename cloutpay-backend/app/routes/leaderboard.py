@@ -25,19 +25,26 @@ def _is_paid_user(db: Session, user_id: Optional[int]) -> bool:
 
 
 def _build_leaderboard(db: Session, since: Optional[datetime] = None, limit: int = 10) -> list[dict]:
-    q = db.query(Payment.user_name, func.sum(Payment.amount).label("total"))
+    q = (
+        db.query(User.display_name.label("name"), User.share_token, func.sum(Payment.amount).label("total"))
+        .join(PaymentOrder, PaymentOrder.id == Payment.order_id)
+        .join(User, User.id == PaymentOrder.user_id)
+    )
     if since:
         q = q.filter(Payment.created_at >= since)
 
     named = (
-        q.filter(Payment.user_name != "Anonymous")
-        .group_by(Payment.user_name)
+        q.filter(User.display_name != None)
+        .group_by(User.id, User.display_name, User.share_token)
         .order_by(func.sum(Payment.amount).desc())
         .limit(limit)
         .all()
     )
 
-    leaderboard = [{"name": r.user_name, "amount": int(r.total)} for r in named]
+    leaderboard = [
+        {"name": r.name, "amount": int(r.total), "share_token": r.share_token}
+        for r in named
+    ]
 
     anon_q = db.query(func.sum(Payment.amount)).filter(Payment.user_name == "Anonymous")
     if since:
