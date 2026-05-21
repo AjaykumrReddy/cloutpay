@@ -662,13 +662,17 @@
     <div class="user-profile-card" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
       <div class="success-glow success-glow-a"></div>
       <div class="success-glow success-glow-b"></div>
+
       <p class="rank-card-brand">CloutPay</p>
       <p class="upc-rank">{selectedUser.rank ? `#${selectedUser.rank}` : '🔥'}</p>
       <p class="upc-name">{selectedUser.display_name}</p>
+
       {#if selectedUser.city || selectedUser.state}
         <p class="upc-location">📍 {selectedUser.city ?? ''}{selectedUser.city && selectedUser.state ? ', ' : ''}{selectedUser.state ?? ''}</p>
       {/if}
+
       <p class="upc-total">Rs {selectedUser.total.toLocaleString('en-IN')} total paid</p>
+
       {#if selectedUser.current_streak > 0}
         <div class="upc-streak">
           <span>{selectedUser.current_streak >= 7 ? '🔥' : '🎯'} {selectedUser.current_streak} day streak</span>
@@ -677,19 +681,42 @@
           {/if}
         </div>
       {/if}
-      <div class="upc-badges">
-        <p class="upc-badges-label">Badges</p>
-        <div class="badge-list">
-          {#if selectedUser.badges.some((badge) => badge.earned)}
-            {#each selectedUser.badges.filter((badge) => badge.earned) as badge}
+
+      {#if selectedUser.badges?.some(b => b.earned)}
+        <div class="upc-badges">
+          <div class="badge-list">
+            {#each selectedUser.badges.filter(b => b.earned) as badge}
               <span class="profile-badge" title={badge.desc}>{badge.emoji} {badge.label}</span>
             {/each}
-          {:else}
-            <span class="no-badges">No public badges yet</span>
-          {/if}
+          </div>
         </div>
+      {/if}
+
+      <!-- Pay to overtake CTA -->
+      {#if $isLoggedIn && mySummary && selectedUser.rank && mySummary.current_rank && selectedUser.rank < mySummary.current_rank}
+        {@const needed = selectedUser.total - (mySummary.total_contributed ?? 0) + 1}
+        {#if needed > 0}
+          <div class="upc-overtake">
+            <p class="upc-overtake-text">🎯 Pay Rs {needed.toLocaleString('en-IN')} to overtake {selectedUser.display_name}</p>
+            <button class="upc-overtake-btn" onclick={() => { amount = needed; selectedUser = null; }}>
+              Pay Rs {needed.toLocaleString('en-IN')} to overtake →
+            </button>
+          </div>
+        {/if}
+      {:else if $isLoggedIn && mySummary && (!mySummary.current_rank || (selectedUser.rank && selectedUser.rank > (mySummary.current_rank ?? 999)))}
+        <!-- they are below us, show their total as context -->
+      {:else if !$isLoggedIn}
+        <a href="/login" class="upc-overtake-btn" onclick={() => selectedUser = null}>Login to compete →</a>
+      {/if}
+
+      <div class="upc-actions">
+        <button class="upc-share-btn" onclick={async () => {
+          const url = `${window.location.origin}/share/${selectedUser?.share_token}`;
+          if (navigator.share) { try { await navigator.share({ title: 'CloutPay', url }); } catch {} }
+          else { await navigator.clipboard.writeText(url); toast.success('Profile link copied'); }
+        }}>Share profile</button>
+        <button class="close-btn" onclick={() => selectedUser = null}>Close</button>
       </div>
-      <button class="close-btn" style="margin-top:20px" onclick={() => selectedUser = null}>Close</button>
     </div>
   </div>
 {/if}
@@ -1786,47 +1813,80 @@
   .upc-best { color: #555; font-size: 11px; }
 
   .upc-badges {
-    margin-top: 18px;
-    text-align: center;
+    margin-top: 14px;
   }
-
-  .upc-badges-label {
-    margin: 0 0 10px;
-    font-size: 11px;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    color: #ffcc00;
-    font-weight: 700;
-  }
-
+  
   .badge-list {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: 10px;
+    gap: 6px;
   }
 
   .profile-badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 10px 14px;
+    gap: 4px;
+    padding: 5px 10px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: #fff;
-    font-size: 13px;
+    background: rgba(255,204,0,0.08);
+    border: 1px solid rgba(255,204,0,0.2);
+    color: #ffdf71;
+    font-size: 12px;
+    font-weight: 600;
   }
 
-  .no-badges {
-    color: #aaa;
-    font-size: 13px;
+  .upc-overtake {
+    margin-top: 16px;
+    padding: 14px;
+    border-radius: 14px;
+    background: rgba(255,77,77,0.07);
+    border: 1px solid rgba(255,77,77,0.2);
   }
 
-  .loading-spinner {
-    color: #666;
-    font-size: 14px;
-    font-family: 'Inter', sans-serif;
+  .upc-overtake-text {
+    margin: 0 0 10px;
+    font-size: 12px;
+    color: #ff9a9a;
+  }
+
+  .upc-overtake-btn {
+    display: block;
+    width: 100%;
+    padding: 11px;
+    border-radius: 10px;
+    border: none;
+    background: linear-gradient(90deg, #ff4d4d, #ffcc00);
+    color: black;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    text-decoration: none;
+    text-align: center;
+  }
+
+  .upc-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .upc-share-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.05);
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .upc-actions .close-btn {
+    flex: 1;
+    padding: 10px;
+    font-size: 13px;
   }
 
   .board-lock {

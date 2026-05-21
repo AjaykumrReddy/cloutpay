@@ -67,10 +67,40 @@ def _get_user_stats(share_token: str, db: Session) -> Optional[dict]:
 
 @router.get("/{share_token}/stats")
 def share_stats(share_token: str, db: Session = Depends(get_db)):
-    stats = _get_user_stats(share_token, db)
-    if not stats:
+    user = db.query(User).filter_by(share_token=share_token).first()
+    if not user or not user.display_name:
         raise HTTPException(status_code=404, detail="User not found")
-    return JSONResponse(content=stats, headers={"Cache-Control": "no-store"})
+
+    order_ids = [r.id for r in db.query(PaymentOrder.id).filter_by(user_id=user.id, status="paid").all()]
+    total = (db.query(func.sum(Payment.amount)).filter(Payment.order_id.in_(order_ids)).scalar()) or 0
+
+    totals = [
+        row.user_name
+        for row in db.query(Payment.user_name, func.sum(Payment.amount).label("t"))
+        .filter(Payment.user_name != "Anonymous")
+        .group_by(Payment.user_name)
+        .order_by(func.sum(Payment.amount).desc())
+        .all()
+    ]
+    rank = next((i + 1 for i, name in enumerate(totals) if name == user.display_name), None)
+
+    # Compute badges
+    from app.routes.badges import _compute_badges, BADGES
+    payments = db.query(Payment).filter(Payment.order_id.in_(order_ids)).all()
+    biggest = int(max((p.amount for p in payments), default=0))
+    badges = _compute_badges(payments, int(total), rank, biggest, user.longest_streak or 0)
+
+    return JSONResponse(content={
+        "display_name": user.display_name,
+        "total": int(total),
+        "rank": rank,
+        "share_token": user.share_token,
+        "current_streak": user.current_streak or 0,
+        "longest_streak": user.longest_streak or 0,
+        "city": user.city,
+        "state": user.state,
+        "badges": badges,
+    }, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/{share_token}/card.png")
